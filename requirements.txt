@@ -1,0 +1,11 @@
+streamlit>=1.28.0
+pandas>=2.0.0
+lxml>=4.9.0
+requests>=2.31.0
+openpyxl>=3.1.0
+plotly>=5.17.0
+supabase>=2.0.0
+# Nota: O código foi atualizado para funcionar com supabase 2.x
+# Se preferir usar a versão 1.x (supabase-py), descomente a linha abaixo e comente a linha acima:
+# supabase-py==1.0.3
+python-dotenv>=1.0.0
