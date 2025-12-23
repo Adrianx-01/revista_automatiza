@@ -942,9 +942,6 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
             
             st.markdown("---")
             
-            # Opções de verificação
-            opcoes_verificacao = ['', 'marca não sendo utilizada', 'marca sendo utilizada']
-            
             # Atualizar coluna verificacao com valores do session state
             for idx, row in df_filtrado.iterrows():
                 processo = str(row.get('processo', f'row_{idx}'))
@@ -971,28 +968,41 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
             
             # ========== TABELA 1: PROCESSOS NÃO VERIFICADOS ==========
             st.subheader("📋 Processos Filtrados (Não Verificados)")
-            st.markdown("Processos que ainda não receberam verificação")
+            st.markdown("Selecione os processos que deseja marcar como verificados")
             
             if not df_nao_verificados.empty:
+                # Inicializar seleção de processos se não existir
+                if 'processos_selecionados' not in st.session_state:
+                    st.session_state.processos_selecionados = set()
+                
                 colunas_para_exibir_nao_ver = df_nao_verificados.columns.tolist()
                 for col in colunas_para_remover:
                     if col in colunas_para_exibir_nao_ver:
                         colunas_para_exibir_nao_ver.remove(col)
                 
+                # Remover coluna verificacao da exibição (não precisamos mais dela aqui)
+                if 'verificacao' in colunas_para_exibir_nao_ver:
+                    colunas_para_exibir_nao_ver.remove('verificacao')
+                
                 df_exibicao_nao_ver = df_nao_verificados[colunas_para_exibir_nao_ver].copy()
                 
-                # Configurar colunas para exibição
-                column_config_nao_ver = {}
-                if 'verificacao' in df_exibicao_nao_ver.columns:
-                    column_config_nao_ver['verificacao'] = st.column_config.SelectboxColumn(
-                        "Verificação",
-                        help="Selecione o status de verificação da marca",
-                        options=opcoes_verificacao,
-                        required=False,
-                        width="medium"
-                    )
+                # Resetar índice para garantir mapeamento correto
+                df_exibicao_nao_ver = df_exibicao_nao_ver.reset_index(drop=True)
+                df_nao_verificados_reset = df_nao_verificados.reset_index(drop=True)
                 
-                # Usar data_editor para permitir edição
+                # Adicionar coluna de seleção (checkbox)
+                df_exibicao_nao_ver.insert(0, 'Selecionar', False)
+                
+                # Configurar coluna de checkbox
+                column_config_nao_ver = {
+                    'Selecionar': st.column_config.CheckboxColumn(
+                        "Selecionar",
+                        help="Marque os processos que deseja verificar",
+                        width="small"
+                    )
+                }
+                
+                # Usar data_editor para permitir seleção
                 df_editado_nao_ver = st.data_editor(
                     df_exibicao_nao_ver,
                     use_container_width=True,
@@ -1002,7 +1012,56 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
                     key="tabela_processos_nao_verificados"
                 )
                 
-                st.info(f"📊 **{len(df_nao_verificados)}** processo(s) não verificado(s)")
+                # Botão para marcar como verificado
+                processos_selecionados = df_editado_nao_ver[df_editado_nao_ver['Selecionar'] == True]
+                num_selecionados = len(processos_selecionados)
+                
+                col_btn, col_info = st.columns([1, 2])
+                
+                with col_btn:
+                    if st.button("✅ Marcar como Verificado", 
+                                type="primary", 
+                                disabled=(num_selecionados == 0),
+                                key="btn_marcar_verificado",
+                                use_container_width=True):
+                        # Obter números dos processos selecionados
+                        processos_para_verificar = []
+                        # O df_editado tem a mesma ordem que df_nao_verificados_reset (índices resetados)
+                        indices_selecionados = processos_selecionados.index.tolist()
+                        
+                        for idx_editado in indices_selecionados:
+                            # O índice do df_editado corresponde ao índice do df_nao_verificados_reset
+                            if idx_editado < len(df_nao_verificados_reset):
+                                processo_num = df_nao_verificados_reset.iloc[idx_editado].get('processo', None)
+                                if processo_num:
+                                    processos_para_verificar.append(str(processo_num))
+                        
+                        if processos_para_verificar:
+                            # Marcar como verificado (usar valor padrão "verificado")
+                            verificacoes_para_salvar = {proc: "verificado" for proc in processos_para_verificar}
+                            
+                            with st.spinner(f"Marcando {len(verificacoes_para_salvar)} processo(s) como verificado(s)..."):
+                                resultado = db.atualizar_verificacoes_lote(verificacoes_para_salvar)
+                                if resultado['sucesso']:
+                                    # Atualizar session state
+                                    for proc in processos_para_verificar:
+                                        st.session_state.verificacoes_dict[proc] = "verificado"
+                                        # Atualizar no DataFrame completo
+                                        mask = df['processo'] == proc
+                                        if mask.any():
+                                            df.loc[mask, 'verificacao'] = "verificado"
+                                            st.session_state.df_processos_consultar.loc[mask, 'verificacao'] = "verificado"
+                                    
+                                    st.success(f"✅ {resultado['sucessos']} processo(s) marcado(s) como verificado(s)!")
+                                    if resultado.get('erros'):
+                                        st.warning(f"⚠️ {len(resultado['erros'])} erro(s) ao salvar algumas verificações.")
+                                    # Recarregar dados para atualizar a separação
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Erro ao salvar verificações: {resultado.get('erro', 'Erro desconhecido')}")
+                
+                with col_info:
+                    st.info(f"📊 **{len(df_nao_verificados)}** processo(s) não verificado(s) | **{num_selecionados}** selecionado(s)")
             else:
                 st.info("✅ Todos os processos já foram verificados!")
                 df_editado_nao_ver = pd.DataFrame()
@@ -1019,95 +1078,22 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
                     if col in colunas_para_exibir_ver:
                         colunas_para_exibir_ver.remove(col)
                 
+                # Remover coluna verificacao da exibição (apenas para visualização)
+                if 'verificacao' in colunas_para_exibir_ver:
+                    colunas_para_exibir_ver.remove('verificacao')
+                
                 df_exibicao_ver = df_verificados[colunas_para_exibir_ver].copy()
                 
-                # Configurar colunas para exibição (permitir edição também)
-                column_config_ver = {}
-                if 'verificacao' in df_exibicao_ver.columns:
-                    column_config_ver['verificacao'] = st.column_config.SelectboxColumn(
-                        "Verificação",
-                        help="Status de verificação da marca",
-                        options=opcoes_verificacao,
-                        required=False,
-                        width="medium"
-                    )
-                
-                # Usar data_editor para permitir edição (caso queira alterar ou remover verificação)
-                df_editado_ver = st.data_editor(
+                # Apenas exibir (sem edição)
+                st.dataframe(
                     df_exibicao_ver,
                     use_container_width=True,
-                    hide_index=True,
-                    column_config=column_config_ver,
-                    num_rows="fixed",
-                    key="tabela_processos_verificados"
+                    hide_index=True
                 )
                 
                 st.info(f"📊 **{len(df_verificados)}** processo(s) verificado(s)")
             else:
                 st.info("ℹ️ Nenhum processo verificado ainda.")
-                df_editado_ver = pd.DataFrame()
-            
-            st.markdown("---")
-            
-            # ========== PROCESSAR MUDANÇAS DE AMBAS AS TABELAS ==========
-            verificacoes_para_salvar = {}
-            
-            # Processar mudanças na tabela de não verificados
-            if 'tabela_processos_nao_verificados' in st.session_state and not df_editado_nao_ver.empty:
-                edited_data_nao_ver = st.session_state.tabela_processos_nao_verificados.get('edited_rows', {})
-                
-                for idx_str, row_data in edited_data_nao_ver.items():
-                    idx = int(idx_str)
-                    if idx < len(df_editado_nao_ver):
-                        processo = str(df_editado_nao_ver.iloc[idx].get('processo', f'row_{idx}'))
-                        if 'verificacao' in row_data:
-                            nova_verificacao = row_data['verificacao']
-                            # Verificar se houve mudança
-                            verificacao_anterior = st.session_state.verificacoes_dict.get(processo, '')
-                            if nova_verificacao != verificacao_anterior:
-                                st.session_state.verificacoes_dict[processo] = nova_verificacao
-                                verificacoes_para_salvar[processo] = nova_verificacao
-                                # Atualizar no DataFrame completo
-                                mask = df['processo'] == processo
-                                if mask.any():
-                                    df.loc[mask, 'verificacao'] = nova_verificacao
-                                # Atualizar no session state
-                                st.session_state.df_processos_consultar.loc[mask, 'verificacao'] = nova_verificacao
-            
-            # Processar mudanças na tabela de verificados
-            if 'tabela_processos_verificados' in st.session_state and not df_editado_ver.empty:
-                edited_data_ver = st.session_state.tabela_processos_verificados.get('edited_rows', {})
-                
-                for idx_str, row_data in edited_data_ver.items():
-                    idx = int(idx_str)
-                    if idx < len(df_editado_ver):
-                        processo = str(df_editado_ver.iloc[idx].get('processo', f'row_{idx}'))
-                        if 'verificacao' in row_data:
-                            nova_verificacao = row_data['verificacao']
-                            # Verificar se houve mudança
-                            verificacao_anterior = st.session_state.verificacoes_dict.get(processo, '')
-                            if nova_verificacao != verificacao_anterior:
-                                st.session_state.verificacoes_dict[processo] = nova_verificacao
-                                verificacoes_para_salvar[processo] = nova_verificacao
-                                # Atualizar no DataFrame completo
-                                mask = df['processo'] == processo
-                                if mask.any():
-                                    df.loc[mask, 'verificacao'] = nova_verificacao
-                                # Atualizar no session state
-                                st.session_state.df_processos_consultar.loc[mask, 'verificacao'] = nova_verificacao
-            
-            # Salvar verificações no Supabase
-            if verificacoes_para_salvar:
-                with st.spinner(f"Salvando {len(verificacoes_para_salvar)} verificação(ões) no Supabase..."):
-                    resultado = db.atualizar_verificacoes_lote(verificacoes_para_salvar)
-                    if resultado['sucesso']:
-                        st.success(f"✅ {resultado['sucessos']} verificação(ões) salva(s) com sucesso!")
-                        if resultado.get('erros'):
-                            st.warning(f"⚠️ {len(resultado['erros'])} erro(s) ao salvar algumas verificações.")
-                        # Recarregar dados para atualizar a separação
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Erro ao salvar verificações: {resultado.get('erro', 'Erro desconhecido')}")
         else:
             st.warning("Nenhum processo encontrado no banco de dados.")
 
