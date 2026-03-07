@@ -322,7 +322,7 @@ class DatabaseSupabase:
     
     def buscar_processos(
         self,
-        classe: Optional[str] = None,
+        classes: Optional[List[str]] = None,
         marca: Optional[str] = None,
         numero_revista: Optional[str] = None,
         limit: Optional[int] = None
@@ -331,7 +331,7 @@ class DatabaseSupabase:
         Busca processos da tabela dados_marcas do Supabase
         
         Args:
-            classe: Filtrar por classe (opcional)
+            classes: Filtrar por lista de classes Nice (opcional). Ex: ['3', '8', '9']
             marca: Filtrar por marca (opcional)
             numero_revista: Filtrar por número da revista (opcional)
             limit: Limite de registros (None para buscar todos)
@@ -342,13 +342,29 @@ class DatabaseSupabase:
         try:
             todos_registros = []
             pagina = 0
-            tamanho_pagina = 1000  # Supabase tem limite padrão de 1000 por página
+            tamanho_pagina = 1000
+            limite_maximo = limit
+            
+            colunas_timestamp = ['updated_at', 'created_at', 'id']
+            coluna_timestamp_funcional = None
+            
+            for col_timestamp in colunas_timestamp:
+                try:
+                    query_teste = self.supabase.table('dados_marcas').select('id').order(col_timestamp, desc=True).limit(1)
+                    query_teste.execute()
+                    coluna_timestamp_funcional = col_timestamp
+                    break
+                except:
+                    continue
+            
+            if not coluna_timestamp_funcional:
+                coluna_timestamp_funcional = 'id'
             
             while True:
                 query = self.supabase.table('dados_marcas').select('*')
                 
-                if classe:
-                    query = query.eq('classe', classe)
+                if classes and len(classes) > 0:
+                    query = query.in_('classe', classes)
                 
                 if marca:
                     query = query.ilike('marca', f'%{marca}%')
@@ -356,8 +372,8 @@ class DatabaseSupabase:
                 if numero_revista:
                     query = query.eq('n_revista', numero_revista)
                 
-                # Aplicar paginação
-                query = query.order('created_at', desc=True).range(
+                # Aplicar paginação com a coluna que funciona
+                query = query.order(coluna_timestamp_funcional, desc=True).range(
                     pagina * tamanho_pagina,
                     (pagina + 1) * tamanho_pagina - 1
                 )
@@ -371,9 +387,9 @@ class DatabaseSupabase:
                     if len(resultado.data) < tamanho_pagina:
                         break
                     
-                    # Se limit foi especificado e já temos registros suficientes
-                    if limit and len(todos_registros) >= limit:
-                        todos_registros = todos_registros[:limit]
+                    # Se já atingimos o limite máximo (apenas se limite foi definido)
+                    if limite_maximo is not None and len(todos_registros) >= limite_maximo:
+                        todos_registros = todos_registros[:limite_maximo]
                         break
                     
                     pagina += 1
@@ -396,8 +412,68 @@ class DatabaseSupabase:
                 return pd.DataFrame()
         
         except Exception as e:
-            print(f"Erro ao buscar processos: {str(e)}")
-            return pd.DataFrame()
+            # Re-raise para que o erro seja tratado no Streamlit
+            erro_msg = f"Erro ao buscar processos: {str(e)}"
+            print(erro_msg)
+            raise Exception(erro_msg)
+    
+    def contar_processos(
+        self,
+        classes: Optional[List[str]] = None,
+        marca: Optional[str] = None,
+        numero_revista: Optional[str] = None
+    ) -> int:
+        """
+        Conta o número total de processos sem carregar todos os dados
+        
+        Args:
+            classes: Filtrar por lista de classes (opcional)
+            marca: Filtrar por marca (opcional)
+            numero_revista: Filtrar por número da revista (opcional)
+            
+        Returns:
+            Número total de processos (ou 0 se não conseguir contar)
+        """
+        try:
+            try:
+                query = self.supabase.table('dados_marcas').select('id', count='exact')
+                
+                if classes and len(classes) > 0:
+                    query = query.in_('classe', classes)
+                
+                if marca:
+                    query = query.ilike('marca', f'%{marca}%')
+                
+                if numero_revista:
+                    query = query.eq('n_revista', numero_revista)
+                
+                resultado = query.execute()
+                
+                # O count pode vir no header HTTP ou no objeto
+                if hasattr(resultado, 'count') and resultado.count is not None:
+                    return resultado.count
+                
+                # Tentar acessar via headers ou outros atributos
+                if hasattr(resultado, 'headers'):
+                    count_header = resultado.headers.get('content-range', '')
+                    if count_header:
+                        # Formato: "0-999/1000" ou "*/1000"
+                        parts = count_header.split('/')
+                        if len(parts) == 2:
+                            try:
+                                return int(parts[1])
+                            except:
+                                pass
+                
+                # Se não conseguir, retornar None para indicar que não foi possível contar
+                return 0
+            except:
+                # Se count='exact' não funcionar, fazer uma busca limitada para estimar
+                # Mas isso não é ideal para grandes volumes
+                return 0
+        except Exception as e:
+            print(f"Erro ao contar processos: {str(e)}")
+            return 0
     
     def obter_estatisticas(self) -> Dict:
         """

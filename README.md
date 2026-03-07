@@ -1,22 +1,23 @@
 # Sistema de Processos Concedidos da Revista INPI
 
-Sistema desenvolvido em Python e Streamlit para processar e visualizar processos concedidos da Revista da Propriedade Industrial (RPI) do INPI, organizados por classes de marcas.
+Sistema desenvolvido em Python e Streamlit para processar e visualizar processos concedidos da Revista da Propriedade Industrial (RPI) do INPI, organizados por classes de marcas. Utiliza autenticação via Supabase e armazenamento em nuvem.
 
 ## 🚀 Funcionalidades
 
-- 📥 Upload de arquivos da Revista do INPI (XML, CSV, XLSX)
+- 🔐 Autenticação via Supabase (login com email e senha)
+- 📥 Upload de revistas XML para o storage do Supabase
 - 🔍 Filtro automático de processos concedidos (despacho IPAS158)
-- 💾 Integração com Supabase para armazenamento de dados
-- 📊 Visualização por classes de marcas
-- 📈 Gráficos e estatísticas interativas
-- 🔍 Consulta de dados salvos no Supabase
-- 📥 Exportação de dados filtrados
+- 🎯 Filtros por classes Nice e palavras-chave na importação
+- 💾 Integração com Supabase (banco de dados + storage)
+- 📊 Consulta de dados por classes selecionadas (carregamento sob demanda)
+- ✅ Marcação de processos como verificados
+- 📋 Visualização e filtros por classe, marca e revista
 
 ## 📋 Requisitos
 
 - Python 3.8 ou superior
 - pip
-- Conta no Supabase (opcional, mas recomendado)
+- Conta no Supabase (obrigatório)
 
 ## 🔧 Instalação
 
@@ -28,36 +29,41 @@ python -m venv venv
 ```
 
 3. Ative o ambiente virtual:
-   - Windows: `venv\Scripts\activate`
-   - Linux/Mac: `source venv/bin/activate`
+   - **Windows (PowerShell)**: `.\venv\Scripts\Activate.ps1`
+   - **Windows (CMD)**: `venv\Scripts\activate.bat`
+   - **Linux/Mac**: `source venv/bin/activate`
 
 4. Instale as dependências:
 ```bash
 pip install -r requirements.txt
 ```
 
-5. Configure o Supabase (opcional):
+5. Configure o Supabase:
    - Crie um projeto no [Supabase](https://supabase.com)
-   - Copie o arquivo `.env.example` para `.env`
-   - Preencha `SUPABASE_URL` e `SUPABASE_KEY` no arquivo `.env`
-   - Execute o SQL em `supabase_setup.sql` no SQL Editor do Supabase para criar a tabela
+   - Crie um arquivo `.env` na raiz do projeto
+   - Adicione: `SUPABASE_URL` e `SUPABASE_KEY` (obtidos em Settings > API)
+   - Crie as tabelas `dados_marcas` e `revista`, o bucket de storage `revista` e configure as políticas RLS
 
 ## ▶️ Como Executar
 
-Execute o seguinte comando:
 ```bash
 streamlit run app.py
 ```
 
-O sistema abrirá automaticamente no navegador em `http://localhost:8501`
+O sistema abrirá em `http://localhost:8501`
 
 ## 📖 Como Usar
 
-1. Faça o download da Revista do INPI no [site oficial](https://www.gov.br/inpi/pt-br/servicos/marcas/revista-da-propriedade-industrial)
-2. Faça upload do arquivo na barra lateral (XML, CSV ou XLSX)
-3. Clique em "Processar Arquivo"
-4. Visualize os dados filtrados por classe e marca
-5. Exporte os resultados em CSV ou Excel
+1. **Login**: Acesse o sistema e faça login com suas credenciais Supabase
+2. **Gerenciar Revistas**:
+   - Configure classes Nice e palavras-chave para filtro
+   - Faça upload de arquivos XML para o storage
+   - Baixe revistas do storage e processe com os filtros configurados (os dados são salvos no banco)
+3. **Consultar Dados**:
+   - Selecione as classes Nice desejadas
+   - Clique em "Carregar Dados" para buscar apenas os processos dessas classes
+   - Aplique filtros por marca e revista
+   - Marque processos como verificados
 
 ## 📊 Estrutura de Dados
 
@@ -81,9 +87,9 @@ O sistema espera arquivos da Revista do INPI que contenham pelo menos:
 
 ## 📝 Notas
 
-- O sistema filtra automaticamente processos com status "concedido"
+- O sistema filtra automaticamente processos com status "concedido" (IPAS158)
 - As classes seguem a Classificação Internacional de Nice (1-45)
-- O formato XML pode variar - pode ser necessário ajustar o código de parsing conforme a estrutura do XML fornecido pelo INPI
+- Na consulta, **nenhum dado é carregado automaticamente** – selecione as classes e clique em "Carregar Dados"
 
 ## 🔗 Links Úteis
 

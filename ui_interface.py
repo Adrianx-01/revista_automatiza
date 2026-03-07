@@ -818,7 +818,7 @@ def renderizar_visualizacao_dados(df, processador: ProcessadorINPI):
 def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supabase):
     """Renderiza a aba de Consultar Dados"""
     st.header("🔍 Consultar Dados")
-    st.markdown("Visualize todos os processos salvos no Supabase")
+    st.markdown("Selecione as classes para carregar os processos do Supabase")
     st.markdown("---")
     
     if db is None:
@@ -827,19 +827,60 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
             init_supabase.clear()
             st.rerun()
     else:
-        # Carregar dados automaticamente na primeira vez
-        if 'df_processos_consultar' not in st.session_state or st.session_state.df_processos_consultar is None:
-            with st.spinner("Carregando dados do Supabase..."):
-                df_todos = db.buscar_processos(limit=None)  # Buscar todos os registros
-                if not df_todos.empty:
-                    # Adicionar coluna verificacao se não existir no banco
-                    if 'verificacao' not in df_todos.columns:
-                        df_todos['verificacao'] = ''
-                    st.session_state.df_processos_consultar = df_todos.copy()
-                else:
-                    st.session_state.df_processos_consultar = pd.DataFrame()
+        # Inicializar df_processos_consultar se não existir (não carregar nada automaticamente)
+        if 'df_processos_consultar' not in st.session_state:
+            st.session_state.df_processos_consultar = None
         
-        df = st.session_state.df_processos_consultar.copy()
+        # Seção: Seleção de classes (OBRIGATÓRIA antes de carregar)
+        st.subheader("🎯 Selecione as Classes")
+        opcoes_classes = [str(i) for i in range(1, 46)]
+        
+        classes_selecionadas_consultar = st.multiselect(
+            "Classes Nice (1-45):",
+            options=opcoes_classes,
+            default=st.session_state.get('classes_consultar_selecionadas', []),
+            help="Selecione uma ou mais classes para carregar apenas esses processos do banco",
+            key="multiselect_classes_consultar"
+        )
+        st.session_state.classes_consultar_selecionadas = classes_selecionadas_consultar
+        
+        col_btn_carregar, col_btn_limpar = st.columns([1, 1])
+        with col_btn_carregar:
+            carregar_clicado = st.button("📥 Carregar Dados", type="primary", key="btn_carregar_consultar", use_container_width=True)
+        with col_btn_limpar:
+            limpar_clicado = st.button("🔄 Limpar e Recarregar", key="btn_limpar_consultar", use_container_width=True)
+        
+        if limpar_clicado:
+            st.session_state.df_processos_consultar = None
+            st.session_state.verificacoes_dict = {}
+            st.rerun()
+        
+        if carregar_clicado:
+            if not classes_selecionadas_consultar:
+                st.warning("⚠️ Selecione pelo menos uma classe para carregar os dados.")
+            else:
+                try:
+                    with st.spinner(f"Carregando processos das classes {', '.join(classes_selecionadas_consultar)}..."):
+                        df_todos = db.buscar_processos(classes=classes_selecionadas_consultar)
+                        if not df_todos.empty:
+                            if 'verificacao' not in df_todos.columns:
+                                df_todos['verificacao'] = ''
+                            st.session_state.df_processos_consultar = df_todos.copy()
+                            st.success(f"✅ {len(df_todos):,} processo(s) carregado(s) das classes {', '.join(classes_selecionadas_consultar)}!")
+                            st.rerun()
+                        else:
+                            st.session_state.df_processos_consultar = pd.DataFrame()
+                            st.warning(f"⚠️ Nenhum processo encontrado para as classes {', '.join(classes_selecionadas_consultar)}.")
+                            st.rerun()
+                except Exception as e:
+                    erro_msg = str(e)
+                    st.error(f"❌ Erro ao carregar dados: {erro_msg}")
+                    if 'timeout' in erro_msg.lower() or 'connection' in erro_msg.lower():
+                        st.info("💡 Verifique sua conexão com a internet.")
+                    elif 'rls' in erro_msg.lower() or 'row-level security' in erro_msg.lower():
+                        st.info("💡 Verifique as políticas RLS do Supabase na tabela dados_marcas.")
+        
+        df = st.session_state.df_processos_consultar.copy() if st.session_state.df_processos_consultar is not None else pd.DataFrame()
         
         if not df.empty:
             # Garantir que a coluna verificacao existe
@@ -1095,7 +1136,7 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
             else:
                 st.info("ℹ️ Nenhum processo verificado ainda.")
         else:
-            st.warning("Nenhum processo encontrado no banco de dados.")
+            st.info("👆 Selecione as classes acima e clique em **Carregar Dados** para buscar os processos.")
 
 
 
