@@ -36,11 +36,16 @@ st.set_page_config(
 # Inicializar processador
 processador = ProcessadorINPI()
 
+# Versão do cliente: ao alterar métodos de DatabaseSupabase, incremente para invalidar
+# o cache do Streamlit (evita instância antiga sem novos métodos após hot-reload).
+_SUPABASE_CLIENT_CACHE_VERSION = 3
+
 # Inicializar conexão com Supabase
 @st.cache_resource
-def init_supabase():
+def init_supabase(_client_version: int = _SUPABASE_CLIENT_CACHE_VERSION):
     """
     Inicializa conexão com Supabase - cacheado para melhor performance.
+    _client_version entra na chave de cache; incremente em _SUPABASE_CLIENT_CACHE_VERSION quando mudar a API.
     """
     try:
         return DatabaseSupabase()
@@ -49,7 +54,7 @@ def init_supabase():
 
 # Tentar inicializar conexão
 try:
-    db = init_supabase()
+    db = init_supabase(_SUPABASE_CLIENT_CACHE_VERSION)
 except Exception as e:
     db = None
 

@@ -3,6 +3,7 @@ Módulo auxiliar para processamento de arquivos da Revista do INPI
 """
 import pandas as pd
 import xml.etree.ElementTree as ET
+from io import BytesIO
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import re
@@ -36,6 +37,24 @@ class ProcessadorINPI:
     
     def __init__(self):
         self.df_processos: Optional[pd.DataFrame] = None
+    
+    def ler_numero_revista_xml_bytes(self, conteudo: bytes) -> Optional[str]:
+        """Lê apenas o atributo numero da revista no XML (sem processar processos)."""
+        try:
+            tree = ET.parse(BytesIO(conteudo))
+            root = tree.getroot()
+            numero_revista = None
+            if root.tag.lower() == 'revista':
+                numero_revista = root.get('numero', None)
+            else:
+                revista_elem = root.find('.//revista')
+                if revista_elem is not None:
+                    numero_revista = revista_elem.get('numero', None)
+            if numero_revista is not None and str(numero_revista).strip():
+                return str(numero_revista).strip()
+        except Exception:
+            pass
+        return None
     
     def processar_xml(self, caminho_arquivo) -> Tuple[pd.DataFrame, Optional[str]]:
         """
@@ -286,6 +305,24 @@ class ProcessadorINPI:
                     return df.columns[idx]
         
         return None
+    
+    def normalizar_classe_unica(self, valor) -> Optional[str]:
+        """
+        Normaliza um único valor de classe Nice (mesma regra de normalizar_classes).
+        """
+        if pd.isna(valor):
+            return None
+        valor_str = str(valor).strip()
+        if valor_str.lower() in ['n/a', 'nan', 'none', '']:
+            return None
+        if valor_str.isdigit():
+            return str(int(valor_str))
+        match = re.search(r'\d+', valor_str)
+        if match:
+            num = int(match.group())
+            if 1 <= num <= 45:
+                return str(num)
+        return valor_str
     
     def normalizar_classes(self, df: pd.DataFrame, coluna_classe: str) -> pd.DataFrame:
         """

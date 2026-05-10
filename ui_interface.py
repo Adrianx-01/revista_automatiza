@@ -138,6 +138,12 @@ def renderizar_navegacao():
             st.session_state.pagina_ativa = "gerenciar"
             st.rerun()
         
+        if st.button("➕ Novas classes", use_container_width=True,
+                    type="primary" if st.session_state.pagina_ativa == "novas_classes" else "secondary",
+                    key="btn_novas_classes"):
+            st.session_state.pagina_ativa = "novas_classes"
+            st.rerun()
+        
         if st.button("🔍 Consultar Dados", use_container_width=True,
                     type="primary" if st.session_state.pagina_ativa == "consultar" else "secondary",
                     key="btn_consultar"):
@@ -369,6 +375,8 @@ def renderizar_aplicacao(processador: ProcessadorINPI, db, init_supabase):
     # Renderizar página selecionada
     if st.session_state.pagina_ativa == "gerenciar":
         renderizar_aba_gerenciar_revistas(processador, db, init_supabase)
+    elif st.session_state.pagina_ativa == "novas_classes":
+        renderizar_aba_novas_classes(processador, db, init_supabase)
     else:
         renderizar_aba_consultar_dados(processador, db, init_supabase)
 
@@ -601,6 +609,281 @@ def renderizar_aba_gerenciar_revistas(processador: ProcessadorINPI, db, init_sup
                     st.info("👈 Selecione revistas para deletar.")
         else:
             st.info("Nenhuma revista encontrada no storage.")
+
+
+def renderizar_aba_novas_classes(processador: ProcessadorINPI, db, init_supabase):
+    """Página dedicada: importar classes adicionais a partir do XML já no storage (sem carregar a aba Gerenciar)."""
+    st.header("➕ Novas classes")
+    st.caption(
+        "Escolha o XML no bucket, as classes Nice e importe só o que ainda não está em `dados_marcas` "
+        "para aquele número de revista. A lista de arquivos vem **direto do storage** (carregamento mais rápido)."
+    )
+    st.markdown("---")
+    if db is None:
+        st.error("⚠️ Supabase não configurado. Configure SUPABASE_URL e SUPABASE_KEY no arquivo .env")
+        if st.button("🔄 Tentar Reconectar", key="reconnect_supabase_novas_classes"):
+            init_supabase.clear()
+            st.rerun()
+        return
+    gerenciador = GerenciadorRevistas(db)
+    _renderizar_complemento_classes_revista(processador, db, gerenciador)
+
+
+def _filtrar_registros_ausentes_no_banco(df: pd.DataFrame, processador: ProcessadorINPI, pares_existentes: set) -> pd.DataFrame:
+    """Remove linhas cujo par (processo, classe) já existe em dados_marcas para a revista."""
+    if df is None or df.empty:
+        return df
+    if not pares_existentes:
+        return df.copy()
+    manter = []
+    for idx, row in df.iterrows():
+        proc = str(row.get('numero_processo', '')).strip() if pd.notna(row.get('numero_processo')) else ''
+        cls = processador.normalizar_classe_unica(row.get('classe'))
+        if not proc or not cls:
+            continue
+        if (proc, cls) in pares_existentes:
+            continue
+        manter.append(idx)
+    return df.loc[manter].copy() if manter else pd.DataFrame(columns=df.columns)
+
+
+def _processar_bytes_xml_com_filtros(
+    arquivo_upload,
+    processador: ProcessadorINPI,
+    *,
+    classes_desejadas: list,
+    palavras_chave: list,
+    aplicar_palavras_chave: bool,
+):
+    """
+    Processa XML com classes e palavras-chave explícitas (não usa session_state para filtros).
+    Retorna (DataFrame | None, numero_revista | None).
+    """
+    df, numero_revista = processador.processar_xml(arquivo_upload)
+    if df is None or df.empty:
+        return None, numero_revista
+    coluna_classe = processador._encontrar_coluna(df, ['classe', 'classe_nice', 'class'])
+    if coluna_classe:
+        df = processador.normalizar_classes(df, coluna_classe)
+    else:
+        coluna_classe = 'classe'
+    coluna_espec = processador._encontrar_coluna(df, ['especificacao', 'especificação', 'specification'])
+    if not coluna_espec:
+        coluna_espec = 'especificacao'
+    palavras = palavras_chave if aplicar_palavras_chave and palavras_chave else None
+    classes_filtro = classes_desejadas if classes_desejadas else None
+    df = processador.filtrar_processos(
+        df,
+        classes_desejadas=classes_filtro,
+        palavras_chave=palavras,
+        coluna_classe=coluna_classe,
+        coluna_especificacao=coluna_espec,
+    )
+    return df, numero_revista
+
+
+def _renderizar_complemento_classes_revista(processador: ProcessadorINPI, db: DatabaseSupabase, gerenciador: GerenciadorRevistas):
+    """Importa classes a partir do XML no storage; deduplica (processo, classe) já gravados para a revista."""
+    st.caption(
+        "Só entram registros que ainda não existem em `dados_marcas` para aquele número de revista "
+        "(processo + classe + revista)."
+    )
+    with st.expander("Como funciona / quando não há dados no banco ainda"):
+        st.markdown(
+            "O arquivo vem do **bucket de revistas** no Supabase. A deduplicação usa o **número da revista** "
+            "(do XML ou do nome do arquivo). Se ainda **não houver linhas** no banco para essa revista, "
+            "**tudo** que passar nos filtros (classes e, se marcar, palavras-chave) será inserido."
+        )
+
+    # Só lista o storage (sem varrer dados_marcas nem cruzar com listar_revistas_disponiveis) — bem mais rápido.
+    no_storage = [
+        n
+        for n in db.listar_revistas()
+        if n and str(n).strip().lower().endswith(".xml")
+    ]
+    opcoes_arquivo = sorted(set(no_storage), reverse=True)
+    if not opcoes_arquivo:
+        st.info(
+            "Nenhum arquivo **.xml** encontrado no bucket de revistas do Supabase. "
+            "Envie os XML em **Gerenciar Revistas → Upload** e tente novamente."
+        )
+        return
+
+    st.markdown("##### Revista no storage")
+    c_rev, c_ref = st.columns([4, 1])
+    with c_ref:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🔄 Atualizar lista", key="complemento_refresh_storage", use_container_width=True):
+            st.rerun()
+    with c_rev:
+        st.caption(f"{len(opcoes_arquivo)} arquivo(s) .xml no bucket — selecione uma ou mais revistas:")
+        arquivos_escolhidos = st.multiselect(
+            "Revistas (arquivos XML no Supabase Storage)",
+            options=opcoes_arquivo,
+            default=[],
+            label_visibility="visible",
+            help="Importação em lote: cada XML é baixado, filtrado e gravado em sequência.",
+            key="complemento_arquivos_revista",
+        )
+    if len(arquivos_escolhidos) == 1:
+        n_rev_um = gerenciador.numero_revista_de_nome_arquivo(arquivos_escolhidos[0])
+        if n_rev_um:
+            classes_ja = db.listar_classes_distintas_revista(str(n_rev_um))
+            if classes_ja:
+                st.caption(
+                    f"Número inferido pelo nome: **{n_rev_um}**. "
+                    f"Classes já presentes no banco: **{', '.join(classes_ja)}**"
+                )
+            else:
+                st.caption(
+                    f"Número inferido pelo nome: **{n_rev_um}**. "
+                    "Nenhuma classe encontrada no banco para esse número (ou dados só com classe vazia)."
+                )
+        else:
+            st.caption(
+                "Não foi possível inferir o número só pelo nome do arquivo; "
+                "ao importar, o número oficial virá do XML para deduplicar e gravar."
+            )
+    elif len(arquivos_escolhidos) > 1:
+        st.caption(
+            f"**{len(arquivos_escolhidos)}** revistas selecionadas — cada uma será processada em sequência; "
+            "o número da revista vem do XML (ou do nome do arquivo)."
+        )
+    opcoes_todas = [str(i) for i in range(1, 46)]
+    classes_novas = st.multiselect(
+        "Classes adicionais a importar agora (Nice 1–45):",
+        options=opcoes_todas,
+        default=[],
+        help="Somente estas classes serão extraídas do XML. Linhas já existentes (mesmo processo + classe + revista) serão ignoradas.",
+        key="complemento_classes_novas",
+    )
+    aplicar_kw = st.checkbox(
+        "Filtrar pela especificação usando palavras-chave (lista abaixo)",
+        value=False,
+        key="complemento_aplicar_palavras",
+        help="Se desmarcado, importa todos os processos concedidos nas classes escolhidas que ainda não estão no banco (somente por classe).",
+    )
+    palavras_para_complemento: list = []
+    if aplicar_kw:
+        st.markdown("**Palavras-chave neste complemento**")
+        todas_palavras_comp = list(
+            set(processador.PALAVRAS_CHAVE_PADRAO + st.session_state.get('palavras_chave_personalizadas', []))
+        )
+        todas_palavras_comp = sorted([p for p in todas_palavras_comp if p])
+        palavras_para_complemento = st.multiselect(
+            "Palavras a considerar na especificação:",
+            options=todas_palavras_comp,
+            default=[],
+            help="Só permanecem processos cuja especificação contém ao menos uma destas palavras. Comece vazio: escolha as palavras que quiser usar.",
+            key="complemento_palavras_multiselect",
+        )
+        st.markdown("**Adicionar nova palavra-chave** (fica disponível aqui e na seção de filtros)")
+        col_pc, col_pb = st.columns([3, 1])
+        with col_pc:
+            nova_palavra_comp = st.text_input(
+                "Nova palavra:",
+                key="complemento_nova_palavra_input",
+                label_visibility="collapsed",
+                placeholder="Digite e clique em Adicionar",
+            )
+        with col_pb:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("➕ Adicionar", key="complemento_adicionar_palavra", use_container_width=True):
+                if nova_palavra_comp and nova_palavra_comp.strip():
+                    limpa = nova_palavra_comp.strip()
+                    lower_all = [x.lower() for x in todas_palavras_comp]
+                    if limpa.lower() not in lower_all:
+                        st.session_state.palavras_chave_personalizadas.append(limpa)
+                        st.success(f"✅ Palavra **{limpa}** adicionada!")
+                        st.rerun()
+                    else:
+                        st.warning(f"A palavra **{limpa}** já está na lista.")
+                else:
+                    st.warning("Digite uma palavra antes de adicionar.")
+    if st.button("📥 Baixar XML e importar classes selecionadas", type="primary", key="btn_complemento_importar"):
+        if not arquivos_escolhidos:
+            st.warning("Selecione pelo menos uma revista (XML).")
+            return
+        if not classes_novas:
+            st.warning("Selecione pelo menos uma classe adicional.")
+            return
+        if aplicar_kw and not palavras_para_complemento:
+            st.warning("Marque palavras-chave na lista ou desative o filtro por palavras-chave.")
+            return
+        total_inseridos = 0
+        erros_lote: list = []
+        avisos_mismatch: list = []
+        with st.spinner(f"Processando {len(arquivos_escolhidos)} revista(s)..."):
+            for nome_arquivo in arquivos_escolhidos:
+                arquivo_bytes = gerenciador.download_revista(nome_arquivo)
+                if not arquivo_bytes:
+                    erros_lote.append(f"{nome_arquivo}: não foi possível baixar do storage.")
+                    continue
+                numero_xml_cab = processador.ler_numero_revista_xml_bytes(arquivo_bytes)
+                n_rev_para_pares = numero_xml_cab or gerenciador.numero_revista_de_nome_arquivo(nome_arquivo)
+                if not n_rev_para_pares:
+                    erros_lote.append(
+                        f"{nome_arquivo}: número da revista não identificado no XML nem no nome do arquivo."
+                    )
+                    continue
+                n_rev_pelo_nome = gerenciador.numero_revista_de_nome_arquivo(nome_arquivo)
+                pares = db.obter_pares_processo_classe_revista(str(n_rev_para_pares))
+                buf = BytesIO(arquivo_bytes)
+                buf.name = nome_arquivo
+                df, numero_xml = _processar_bytes_xml_com_filtros(
+                    buf,
+                    processador,
+                    classes_desejadas=classes_novas,
+                    palavras_chave=palavras_para_complemento if aplicar_kw else [],
+                    aplicar_palavras_chave=aplicar_kw,
+                )
+                if (
+                    numero_xml
+                    and n_rev_pelo_nome
+                    and str(numero_xml).strip() != str(n_rev_pelo_nome).strip()
+                ):
+                    avisos_mismatch.append(
+                        f"{nome_arquivo}: XML revista **{numero_xml}** ≠ nome inferido **{n_rev_pelo_nome}** "
+                        "(gravação usa o número do XML)."
+                    )
+                n_salvar = str(numero_xml).strip() if numero_xml else str(n_rev_para_pares).strip()
+                if df is None or df.empty:
+                    erros_lote.append(
+                        f"{nome_arquivo}: nenhum registro após filtros (IPAS158 / classes / palavras-chave)."
+                    )
+                    continue
+                df_novos = _filtrar_registros_ausentes_no_banco(df, processador, pares)
+                if df_novos.empty:
+                    st.info(f"**{nome_arquivo}** (revista {n_salvar}): nada novo a inserir — já consta no banco.")
+                    continue
+                try:
+                    resultado = db.salvar_processos(df_novos, n_salvar)
+                except Exception as e:
+                    erros_lote.append(f"{nome_arquivo}: erro ao salvar — {e}")
+                    continue
+                if resultado.get('sucesso') and resultado.get('processos_salvos', 0) > 0:
+                    n_ins = resultado['processos_salvos']
+                    total_inseridos += n_ins
+                    st.success(
+                        f"✅ **{nome_arquivo}**: **{n_ins}** novo(s) registro(s) (revista {n_salvar}, "
+                        f"{len(classes_novas)} classe(s))."
+                    )
+                    if resultado.get('erros'):
+                        st.warning(f"Avisos em {nome_arquivo}: {len(resultado['erros'])} mensagem(ns).")
+                else:
+                    erros_lote.append(
+                        f"{nome_arquivo}: {resultado.get('erro', 'Nenhum registro salvo.')}"
+                    )
+        for msg in avisos_mismatch:
+            st.warning(msg)
+        if total_inseridos > 0:
+            st.success(f"**Total:** {total_inseridos} novo(s) registro(s) em {len(arquivos_escolhidos)} arquivo(s) processado(s).")
+        if erros_lote:
+            st.warning(f"{len(erros_lote)} problema(s) no lote:")
+            for e in erros_lote[:15]:
+                st.text(f"  • {e}")
+            if len(erros_lote) > 15:
+                st.caption(f"... e mais {len(erros_lote) - 15}.")
 
 
 def processar_arquivo_upload(arquivo_upload, processador: ProcessadorINPI, db):

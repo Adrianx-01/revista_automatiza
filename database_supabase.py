@@ -3,7 +3,7 @@ Módulo para gerenciar conexão e operações com Supabase
 """
 import os
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set, Tuple
 import dotenv
 import pandas as pd
 from datetime import datetime
@@ -529,23 +529,133 @@ class DatabaseSupabase:
             print(f"Erro ao deletar processos: {str(e)}")
             return False
     
+    @staticmethod
+    def _normalizar_numero_revista(val) -> Optional[str]:
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        s = str(val).strip()
+        if not s or s.lower() in ('nan', 'none'):
+            return None
+        if s.isdigit():
+            return str(int(s))
+        return s
+
     def obter_revistas_processadas(self) -> List[str]:
         """
-        Retorna lista de números de revistas já processadas
-        
-        Returns:
-            Lista de números de revistas
+        Retorna lista de números de revistas já processadas (pagina a tabela inteira).
         """
+        unicos: set = set()
+        pagina = 0
+        tamanho_pagina = 1000
         try:
-            resultado = self.supabase.table('dados_marcas').select('n_revista').execute()
-            if resultado.data:
-                df = pd.DataFrame(resultado.data)
-                revistas = df['n_revista'].dropna().unique().tolist()
-                return [str(r) for r in revistas]
-            return []
+            while True:
+                try:
+                    query = (
+                        self.supabase.table('dados_marcas')
+                        .select('n_revista')
+                        .order('id', desc=False)
+                        .range(
+                            pagina * tamanho_pagina,
+                            (pagina + 1) * tamanho_pagina - 1,
+                        )
+                    )
+                    resultado = query.execute()
+                except Exception:
+                    query = (
+                        self.supabase.table('dados_marcas')
+                        .select('n_revista')
+                        .range(
+                            pagina * tamanho_pagina,
+                            (pagina + 1) * tamanho_pagina - 1,
+                        )
+                    )
+                    resultado = query.execute()
+                if not resultado.data:
+                    break
+                for row in resultado.data:
+                    n = self._normalizar_numero_revista(row.get('n_revista'))
+                    if n:
+                        unicos.add(n)
+                if len(resultado.data) < tamanho_pagina:
+                    break
+                pagina += 1
+            return sorted(
+                unicos,
+                key=lambda x: int(str(x)) if str(x).isdigit() else 0,
+                reverse=True,
+            )
         except Exception as e:
             print(f"Erro ao obter revistas: {str(e)}")
             return []
+    
+    def obter_pares_processo_classe_revista(self, n_revista: str) -> Set[Tuple[str, str]]:
+        """
+        Retorna conjunto (numero_processo, classe_normalizada) já gravados para a revista.
+        Usado para evitar duplicar linhas ao complementar classes.
+        """
+        if not n_revista or not str(n_revista).strip():
+            return set()
+        n_rev = str(n_revista).strip()
+        pares: Set[Tuple[str, str]] = set()
+        pagina = 0
+        tamanho_pagina = 1000
+        
+        def _norm_classe(val) -> str:
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                return ''
+            s = str(val).strip()
+            if s.lower() in ('n/a', 'nan', 'none', ''):
+                return ''
+            if s.isdigit():
+                return str(int(s))
+            return s
+        
+        while True:
+            try:
+                query = (
+                    self.supabase.table('dados_marcas')
+                    .select('processo,classe')
+                    .eq('n_revista', n_rev)
+                    .order('id')
+                    .range(pagina * tamanho_pagina, (pagina + 1) * tamanho_pagina - 1)
+                )
+                resultado = query.execute()
+            except Exception:
+                try:
+                    query = (
+                        self.supabase.table('dados_marcas')
+                        .select('processo,classe')
+                        .eq('n_revista', n_rev)
+                        .range(pagina * tamanho_pagina, (pagina + 1) * tamanho_pagina - 1)
+                    )
+                    resultado = query.execute()
+                except Exception as e:
+                    print(f"Erro ao obter pares processo/classe: {str(e)}")
+                    break
+            
+            if not resultado.data or len(resultado.data) == 0:
+                break
+            
+            for row in resultado.data:
+                proc = row.get('processo')
+                if proc is None or (isinstance(proc, float) and pd.isna(proc)):
+                    continue
+                proc_s = str(proc).strip()
+                cls = _norm_classe(row.get('classe'))
+                if proc_s and cls:
+                    pares.add((proc_s, cls))
+            
+            if len(resultado.data) < tamanho_pagina:
+                break
+            pagina += 1
+        
+        return pares
+    
+    def listar_classes_distintas_revista(self, n_revista: str) -> List[str]:
+        """Classes Nice já presentes em dados_marcas para a revista (normalizadas)."""
+        pares = self.obter_pares_processo_classe_revista(n_revista)
+        classes = sorted({c for (_, c) in pares if c}, key=lambda x: (int(x) if str(x).isdigit() else 999, str(x)))
+        return classes
     
     # Métodos para gerenciar storage de revistas
     def upload_revista(self, arquivo_bytes: bytes, nome_arquivo: str) -> Dict:
@@ -577,15 +687,33 @@ class DatabaseSupabase:
     
     def listar_revistas(self) -> List[str]:
         """
-        Lista todas as revistas no storage
-        
-        Returns:
-            Lista com nomes dos arquivos
+        Lista todas as revistas no storage.
+        A API do Storage pagina (padrão limit=100); percorre todas as páginas.
         """
         try:
-            arquivos = self.supabase.storage.from_(self.bucket_revistas).list()
-            nomes = [arquivo['name'] for arquivo in arquivos if arquivo.get('name')]
-            return sorted(nomes, reverse=True)
+            nomes: List[str] = []
+            offset = 0
+            limit = 100
+            bucket = self.supabase.storage.from_(self.bucket_revistas)
+            while True:
+                arquivos = bucket.list(
+                    "",
+                    {
+                        "limit": limit,
+                        "offset": offset,
+                        "sortBy": {"column": "name", "order": "desc"},
+                    },
+                )
+                if not arquivos:
+                    break
+                for arquivo in arquivos:
+                    n = arquivo.get('name')
+                    if n:
+                        nomes.append(n)
+                if len(arquivos) < limit:
+                    break
+                offset += limit
+            return sorted(set(nomes), reverse=True)
         except Exception as e:
             print(f"Erro ao listar revistas: {str(e)}")
             return []
@@ -683,17 +811,42 @@ class DatabaseSupabase:
     
     def listar_revistas_registradas(self) -> List[str]:
         """
-        Lista todas as revistas registradas na tabela revista
-        
-        Returns:
-            Lista de números de revistas
+        Lista todas as revistas registradas na tabela revista (paginado).
         """
+        vistos: set = set()
+        pagina = 0
+        tamanho = 1000
         try:
-            resultado = self.supabase.table('revista').select('numero_revista').execute()
-            if resultado.data:
-                revistas = [str(r['numero_revista']) for r in resultado.data if r.get('numero_revista')]
-                return sorted(revistas, reverse=True)
-            return []
+            while True:
+                try:
+                    q = (
+                        self.supabase.table('revista')
+                        .select('numero_revista')
+                        .order('numero_revista', desc=False)
+                        .range(pagina * tamanho, (pagina + 1) * tamanho - 1)
+                    )
+                    resultado = q.execute()
+                except Exception:
+                    resultado = (
+                        self.supabase.table('revista')
+                        .select('numero_revista')
+                        .range(pagina * tamanho, (pagina + 1) * tamanho - 1)
+                        .execute()
+                    )
+                if not resultado.data:
+                    break
+                for r in resultado.data:
+                    n = self._normalizar_numero_revista(r.get('numero_revista'))
+                    if n:
+                        vistos.add(n)
+                if len(resultado.data) < tamanho:
+                    break
+                pagina += 1
+            return sorted(
+                vistos,
+                key=lambda x: int(str(x)) if str(x).isdigit() else 0,
+                reverse=True,
+            )
         except Exception as e:
             print(f"Erro ao listar revistas registradas: {str(e)}")
             return []

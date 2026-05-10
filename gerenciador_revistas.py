@@ -1,6 +1,7 @@
 """
 Módulo para gerenciar upload e download de revistas no Supabase
 """
+import re
 import streamlit as st
 import xml.etree.ElementTree as ET
 from database_supabase import DatabaseSupabase
@@ -107,6 +108,83 @@ class GerenciadorRevistas:
         except Exception as e:
             st.error(f"Erro ao listar revistas: {str(e)}")
             return []
+    
+    @staticmethod
+    def _normalizar_digitos_numero_revista(s: str) -> str:
+        """Remove zeros à esquerda para bater com n_revista gravado no banco."""
+        s = str(s).strip()
+        return str(int(s)) if s.isdigit() else s
+
+    @staticmethod
+    def numero_revista_de_nome_arquivo(nome_arquivo: str) -> Optional[str]:
+        """
+        Tenta obter o número da revista (atributo do XML) a partir do nome gravado no storage.
+        Usado para cruzar com dados_marcas.n_revista quando o select mostra o mesmo nome do processamento.
+        """
+        if not nome_arquivo or not str(nome_arquivo).strip():
+            return None
+        nome = str(nome_arquivo).strip()
+        m = re.search(r"(?i)revista[_-](\d+)\s*\.xml$", nome)
+        if m:
+            return GerenciadorRevistas._normalizar_digitos_numero_revista(m.group(1))
+        m = re.match(r"(?i)^(\d+)\s*\.xml$", nome)
+        if m:
+            return GerenciadorRevistas._normalizar_digitos_numero_revista(m.group(1))
+        # Maior sequência numérica no nome (ex.: RM2820.xml, revista2820.xml)
+        partes = re.findall(r"\d+", nome)
+        if not partes:
+            return None
+        candidato = max(partes, key=len)
+        return GerenciadorRevistas._normalizar_digitos_numero_revista(candidato)
+    
+    def listar_arquivos_revista_no_storage_com_dados(
+        self, numeros_revista_com_dados: List[str]
+    ) -> List[str]:
+        """
+        Nomes de arquivo existentes no storage que provavelmente correspondem a revistas já no banco.
+        Mantém a mesma ordem/nomenclatura de listar_revistas_disponiveis, filtrando fantasmas.
+        """
+        if not numeros_revista_com_dados:
+            return []
+        no_storage = set(self.db.listar_revistas())
+        alvo = set()
+        for x in numeros_revista_com_dados:
+            if x is None:
+                continue
+            sx = str(x).strip()
+            if not sx:
+                continue
+            alvo.add(sx)
+            if sx.isdigit():
+                alvo.add(str(int(sx)))
+        resultado = []
+        for nome in self.listar_revistas_disponiveis():
+            if nome not in no_storage:
+                continue
+            nr = self.numero_revista_de_nome_arquivo(nome)
+            if nr and nr in alvo:
+                resultado.append(nome)
+        return resultado
+    
+    def resolver_nome_arquivo_storage(self, numero_revista: str) -> Optional[str]:
+        """
+        Resolve o nome do arquivo XML no storage a partir do número da revista.
+        Tenta revista_{numero}.xml e, se não existir, qualquer .xml cujo nome contenha o número.
+        """
+        num = str(numero_revista).strip()
+        if not num:
+            return None
+        try:
+            no_storage = self.db.listar_revistas()
+        except Exception:
+            no_storage = []
+        candidato = f"revista_{num}.xml"
+        if candidato in no_storage:
+            return candidato
+        for nome in no_storage:
+            if nome and num in nome and str(nome).lower().endswith('.xml'):
+                return nome
+        return None
     
     def download_revista(self, nome_arquivo: str) -> Optional[bytes]:
         """
