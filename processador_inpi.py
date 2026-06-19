@@ -19,7 +19,7 @@ class ProcessadorINPI:
     }
     
     # Classes padrão para filtro (sem zeros à esquerda)
-    CLASSES_PADRAO = ["3", "8", "9", "11", "12", "14", "16", "18", "20", "21", "24", "28", "35"]
+    CLASSES_PADRAO = ["3", "7", "8", "9", "10", "11", "12", "14", "16", "18", "20", "21", "24", "28", "35"]
     
     # Palavras-chave padrão para filtro
     PALAVRAS_CHAVE_PADRAO = [
@@ -32,7 +32,11 @@ class ProcessadorINPI:
         "mochilas", "nécessaires", "móveis", "almofadas", "apoio", "armários", "bancada", "bebê", "camas",
         "canis", "mobiliário", "animais", "animal", "metálicos", "metálicas", "mesas", "mobília", "metal",
         "têxtil", "tecido", "toalha", "cama", "malha", "mantas", "panos", "pano", "metais", "joias", "bijuterias",
-        "relojoaria", "Caixas", "relógio", "Joia", "ouro", "pérolas", "pedras", "metal", "prata"
+        "relojoaria", "Caixas", "relógio", "Joia", "ouro", "pérolas", "pedras", "metal", "prata",
+        # Classe 7 — máquinas e robôs
+        "robô", "robôs", "robot", "robótica", "automação", "industrial",
+        # Classe 10 — aparelhos cirúrgicos e massagem
+        "cirúrgico", "cirúrgicos", "aparelhos cirúrgicos", "massagedor", "massageador", "massagem",
     ]
     
     def __init__(self):
@@ -161,45 +165,50 @@ class ProcessadorINPI:
         if procurador_elem is not None:
             procurador = procurador_elem.text
         
-        # Processar classes Nice - apenas as que foram deferidas
+        # Processar classes Nice (IPAS158: muitas revistas não trazem tag <status>, só codigo + especificacao)
         classes_nice = processo.findall('.//classe-nice')
         
         for classe_nice in classes_nice:
             status_classe = classe_nice.find('status')
-            if status_classe is not None and status_classe.text:
-                status_texto = status_classe.text.strip().lower()
-                # Considerar apenas classes deferidas (aceita "Deferida" e "Deferido")
-                if 'deferid' in status_texto:  # Funciona para "deferida" e "deferido"
-                    codigo_classe = classe_nice.get('codigo', '')
-                    # Manter formato original do XML - a normalização será feita na comparação
-                    # O XML pode ter "03", "08", etc. e será normalizado no filtro
-                    
-                    # Extrair especificações
-                    especificacao = None
-                    espec_elem = classe_nice.find('especificacao')
-                    if espec_elem is not None:
-                        especificacao = espec_elem.text
-                    
-                    traducao = None
-                    trad_elem = classe_nice.find('traducao-especificacao')
-                    if trad_elem is not None:
-                        traducao = trad_elem.text
-                    
-                    processo_dict = {
-                        'numero_processo': numero_processo,
-                        'marca': marca if marca else 'N/A',
-                        'classe': codigo_classe if codigo_classe else 'N/A',
-                        'titular': titular if titular else 'N/A',
-                        'procurador': procurador if procurador else '',
-                        'data_concessao': data_concessao if data_concessao else '',
-                        'status_classe': status_classe.text if status_classe.text else 'Deferido',
-                        'especificacao': especificacao if especificacao else '',
-                        'traducao_especificacao': traducao if traducao else ''
-                    }
-                    
-                    processos_classe.append(processo_dict)
+            status_texto = (
+                status_classe.text.strip().lower()
+                if status_classe is not None and status_classe.text
+                else ''
+            )
+            # Aceita: deferido/deferida OU ausência de status (formato comum em revistas de concessão)
+            if status_texto and 'deferid' not in status_texto:
+                continue
+
+            codigo_classe = classe_nice.get('codigo', '')
+            especificacao = None
+            espec_elem = classe_nice.find('especificacao')
+            if espec_elem is not None:
+                especificacao = espec_elem.text
+
+            traducao = None
+            trad_elem = classe_nice.find('traducao-especificacao')
+            if trad_elem is not None:
+                traducao = trad_elem.text
+
+            status_gravacao = (
+                status_classe.text.strip()
+                if status_classe is not None and status_classe.text
+                else 'Concedido'
+            )
+
+            processos_classe.append({
+                'numero_processo': numero_processo,
+                'marca': marca if marca else 'N/A',
+                'classe': codigo_classe if codigo_classe else 'N/A',
+                'titular': titular if titular else 'N/A',
+                'procurador': procurador if procurador else '',
+                'data_concessao': data_concessao if data_concessao else '',
+                'status_classe': status_gravacao,
+                'especificacao': especificacao if especificacao else '',
+                'traducao_especificacao': traducao if traducao else ''
+            })
         
-        # Se não encontrou classes deferidas, mas o processo foi concedido, criar entrada sem classe
+        # Se não encontrou classes, mas o processo foi concedido, criar entrada sem classe
         if not processos_classe and numero_processo:
             processo_dict = {
                 'numero_processo': numero_processo,
