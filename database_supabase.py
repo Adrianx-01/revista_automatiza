@@ -325,6 +325,7 @@ class DatabaseSupabase:
         classes: Optional[List[str]] = None,
         marca: Optional[str] = None,
         numero_revista: Optional[str] = None,
+        palavras_especificacao: Optional[List[str]] = None,
         limit: Optional[int] = None
     ) -> pd.DataFrame:
         """
@@ -334,6 +335,7 @@ class DatabaseSupabase:
             classes: Filtrar por lista de classes Nice (opcional). Ex: ['3', '8', '9']
             marca: Filtrar por marca (opcional)
             numero_revista: Filtrar por número da revista (opcional)
+            palavras_especificacao: Palavras que devem aparecer na coluna especificacao (OR)
             limit: Limite de registros (None para buscar todos)
             
         Returns:
@@ -344,6 +346,9 @@ class DatabaseSupabase:
             pagina = 0
             tamanho_pagina = 1000
             limite_maximo = limit
+            palavras_limpas = [
+                str(p).strip() for p in (palavras_especificacao or []) if p and str(p).strip()
+            ]
             
             colunas_timestamp = ['updated_at', 'created_at', 'id']
             coluna_timestamp_funcional = None
@@ -371,6 +376,15 @@ class DatabaseSupabase:
                 
                 if numero_revista:
                     query = query.eq('n_revista', numero_revista)
+
+                if palavras_limpas:
+                    if len(palavras_limpas) == 1:
+                        query = query.ilike('especificacao', f'%{palavras_limpas[0]}%')
+                    else:
+                        filtro_or = ','.join(
+                            f"especificacao.ilike.%{p}%" for p in palavras_limpas
+                        )
+                        query = query.or_(filtro_or)
                 
                 # Aplicar paginação com a coluna que funciona
                 query = query.order(coluna_timestamp_funcional, desc=True).range(
@@ -908,5 +922,70 @@ class DatabaseSupabase:
             return {
                 'sucesso': False,
                 'erro': str(e)
+            }
+
+    def contar_processos_verificados(self) -> int:
+        """Conta registros com coluna verificacao preenchida."""
+        try:
+            query = (
+                self.supabase.table('dados_marcas')
+                .select('id', count='exact')
+                .not_.is_('verificacao', 'null')
+                .neq('verificacao', '')
+                .limit(1)
+            )
+            resultado = query.execute()
+            if hasattr(resultado, 'count') and resultado.count is not None:
+                return int(resultado.count)
+            return 0
+        except Exception as e:
+            print(f"Erro ao contar processos verificados: {str(e)}")
+            raise
+
+    def deletar_processos_verificados(self) -> Dict:
+        """
+        Remove do banco todos os registros com verificacao preenchida.
+        """
+        try:
+            removidos = 0
+            lote = 500
+
+            while True:
+                resultado = (
+                    self.supabase.table('dados_marcas')
+                    .select('id')
+                    .not_.is_('verificacao', 'null')
+                    .neq('verificacao', '')
+                    .limit(lote)
+                    .execute()
+                )
+                if not resultado.data:
+                    break
+
+                ids = [row['id'] for row in resultado.data if row.get('id')]
+                if not ids:
+                    break
+
+                self.supabase.table('dados_marcas').delete().in_('id', ids).execute()
+                removidos += len(ids)
+
+                if len(ids) < lote:
+                    break
+
+            return {
+                'sucesso': True,
+                'removidos': removidos,
+                'mensagem': f'{removidos} registro(s) verificado(s) removido(s).',
+            }
+        except Exception as e:
+            erro = str(e)
+            if 'row-level security' in erro.lower() or '42501' in erro:
+                erro = (
+                    f'{erro} — Verifique se existe política DELETE na tabela dados_marcas (RLS).'
+                )
+            return {
+                'sucesso': False,
+                'erro': erro,
+                'removidos': 0,
             }
 

@@ -4,6 +4,7 @@ Contém toda a lógica de apresentação e interação com o usuário
 """
 import streamlit as st
 import pandas as pd
+import re
 from pathlib import Path
 from datetime import datetime
 from io import BytesIO
@@ -1098,10 +1099,25 @@ def renderizar_visualizacao_dados(df, processador: ProcessadorINPI):
         st.dataframe(df, use_container_width=True, hide_index=True)
 
 
+def _parsear_palavras_especificacao_livre(texto: str) -> list:
+    """Converte texto livre em lista de termos (separados por vírgula, ponto-e-vírgula ou linha)."""
+    if not texto or not str(texto).strip():
+        return []
+    palavras = []
+    for parte in re.split(r'[\n,;]+', str(texto)):
+        termo = parte.strip()
+        if termo:
+            palavras.append(termo)
+    return palavras
+
+
 def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supabase):
     """Renderiza a aba de Consultar Dados"""
     st.header("🔍 Consultar Dados")
-    st.markdown("Selecione as classes para carregar os processos do Supabase")
+    st.markdown(
+        "Selecione a **classe Nice** e as **palavras na especificação** para carregar "
+        "apenas os processos que correspondem."
+    )
     st.markdown("---")
     
     if db is None:
@@ -1113,19 +1129,29 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
         # Inicializar df_processos_consultar se não existir (não carregar nada automaticamente)
         if 'df_processos_consultar' not in st.session_state:
             st.session_state.df_processos_consultar = None
+        if 'texto_palavras_consultar' not in st.session_state:
+            st.session_state.texto_palavras_consultar = ''
         
-        # Seção: Seleção de classes (OBRIGATÓRIA antes de carregar)
-        st.subheader("🎯 Selecione as Classes")
+        st.subheader("🎯 Classe e especificações")
         opcoes_classes = [str(i) for i in range(1, 46)]
         
         classes_selecionadas_consultar = st.multiselect(
             "Classes Nice (1-45):",
             options=opcoes_classes,
             default=st.session_state.get('classes_consultar_selecionadas', []),
-            help="Selecione uma ou mais classes para carregar apenas esses processos do banco",
+            help="Selecione uma ou mais classes Nice",
             key="multiselect_classes_consultar"
         )
         st.session_state.classes_consultar_selecionadas = classes_selecionadas_consultar
+
+        texto_palavras_consultar = st.text_area(
+            "Palavras na especificação:",
+            height=100,
+            placeholder="Digite o que deseja buscar — uma palavra ou expressão por linha, ou separadas por vírgula.\nEx.:\ncosméticos\ntelefone\nmóveis",
+            help="O processo entra se a especificação contiver **ao menos um** dos termos digitados.",
+            key="texto_palavras_consultar",
+        )
+        palavras_especificacao_consultar = _parsear_palavras_especificacao_livre(texto_palavras_consultar)
         
         col_btn_carregar, col_btn_limpar = st.columns([1, 1])
         with col_btn_carregar:
@@ -1136,24 +1162,38 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
         if limpar_clicado:
             st.session_state.df_processos_consultar = None
             st.session_state.verificacoes_dict = {}
+            st.session_state.texto_palavras_consultar = ''
             st.rerun()
         
         if carregar_clicado:
             if not classes_selecionadas_consultar:
-                st.warning("⚠️ Selecione pelo menos uma classe para carregar os dados.")
+                st.warning("⚠️ Selecione pelo menos uma classe.")
+            elif not palavras_especificacao_consultar:
+                st.warning("⚠️ Digite pelo menos um termo para buscar na especificação.")
             else:
                 try:
-                    with st.spinner(f"Carregando processos das classes {', '.join(classes_selecionadas_consultar)}..."):
-                        df_todos = db.buscar_processos(classes=classes_selecionadas_consultar)
+                    with st.spinner(
+                        f"Carregando processos (classes {', '.join(classes_selecionadas_consultar)} "
+                        f"| palavras: {', '.join(palavras_especificacao_consultar)})..."
+                    ):
+                        df_todos = db.buscar_processos(
+                            classes=classes_selecionadas_consultar,
+                            palavras_especificacao=palavras_especificacao_consultar,
+                        )
                         if not df_todos.empty:
                             if 'verificacao' not in df_todos.columns:
                                 df_todos['verificacao'] = ''
                             st.session_state.df_processos_consultar = df_todos.copy()
-                            st.success(f"✅ {len(df_todos):,} processo(s) carregado(s) das classes {', '.join(classes_selecionadas_consultar)}!")
+                            st.success(
+                                f"✅ {len(df_todos):,} processo(s) encontrado(s) para as classes "
+                                f"{', '.join(classes_selecionadas_consultar)} com as especificações selecionadas!"
+                            )
                             st.rerun()
                         else:
                             st.session_state.df_processos_consultar = pd.DataFrame()
-                            st.warning(f"⚠️ Nenhum processo encontrado para as classes {', '.join(classes_selecionadas_consultar)}.")
+                            st.warning(
+                                "⚠️ Nenhum processo encontrado para essa classe e essas palavras na especificação."
+                            )
                             st.rerun()
                 except Exception as e:
                     erro_msg = str(e)
@@ -1419,7 +1459,42 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
             else:
                 st.info("ℹ️ Nenhum processo verificado ainda.")
         else:
-            st.info("👆 Selecione as classes acima e clique em **Carregar Dados** para buscar os processos.")
+            st.info(
+                "👆 Selecione a **classe**, digite os **termos na especificação** e clique em **Carregar Dados**."
+            )
+
+        st.markdown("---")
+        with st.expander("🗑️ Apagar processos verificados do banco"):
+            st.warning(
+                "Remove **permanentemente** da tabela `dados_marcas` todos os registros "
+                "cuja coluna **verificacao** está preenchida (em qualquer classe ou revista)."
+            )
+            try:
+                total_verificados_db = db.contar_processos_verificados()
+                st.caption(f"Registros verificados no banco agora: **{total_verificados_db:,}**")
+            except Exception as e:
+                st.caption(f"Não foi possível contar os verificados: {e}")
+                total_verificados_db = None
+
+            confirmar_exclusao = st.checkbox(
+                "Confirmo que desejo apagar todos os processos verificados",
+                key="confirmar_apagar_verificados",
+            )
+            if st.button(
+                "🗑️ Apagar todos os verificados",
+                type="secondary",
+                disabled=not confirmar_exclusao,
+                key="btn_apagar_verificados",
+            ):
+                with st.spinner("Apagando processos verificados..."):
+                    resultado = db.deletar_processos_verificados()
+                if resultado.get('sucesso'):
+                    st.session_state.df_processos_consultar = None
+                    st.session_state.verificacoes_dict = {}
+                    st.success(f"✅ {resultado.get('mensagem', 'Exclusão concluída.')}")
+                    st.rerun()
+                else:
+                    st.error(f"❌ {resultado.get('erro', 'Erro ao apagar processos verificados.')}")
 
 
 

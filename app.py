@@ -38,7 +38,7 @@ processador = ProcessadorINPI()
 
 # Versão do cliente: ao alterar métodos de DatabaseSupabase, incremente para invalidar
 # o cache do Streamlit (evita instância antiga sem novos métodos após hot-reload).
-_SUPABASE_CLIENT_CACHE_VERSION = 3
+_SUPABASE_CLIENT_CACHE_VERSION = 5
 
 # Inicializar conexão com Supabase
 @st.cache_resource
