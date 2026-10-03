@@ -19,7 +19,7 @@ class ProcessadorINPI:
     }
     
     # Classes padrão para filtro (sem zeros à esquerda)
-    CLASSES_PADRAO = ["3", "7", "8", "9", "10", "11", "12", "14", "16", "18", "20", "21", "24", "28", "35"]
+    CLASSES_PADRAO = ["2", "3", "5", "6", "7", "8", "9", "10", "11", "12", "14", "16", "17", "18", "20", "21", "24", "28", "35"]
     
     # Palavras-chave padrão para filtro
     PALAVRAS_CHAVE_PADRAO = [
@@ -37,6 +37,14 @@ class ProcessadorINPI:
         "robô", "robôs", "robot", "robótica", "automação", "industrial",
         # Classe 10 — aparelhos cirúrgicos e massagem
         "cirúrgico", "cirúrgicos", "aparelhos cirúrgicos", "massagedor", "massageador", "massagem",
+        # Classe 2 — tintas
+        "tinta",
+        # Classe 5 — suplementos alimentares
+        "suplemento",
+        # Classe 6 — portas (metal já está na lista)
+        "porta",
+        # Classe 17 — filamento
+        "filamento",
     ]
     
     def __init__(self):

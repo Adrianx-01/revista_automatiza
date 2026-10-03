@@ -228,7 +228,7 @@ class GerenciadorRevistas:
         )
         
         if arquivos_revista is not None and len(arquivos_revista) > 0:
-            if st.button("📤 Enviar para Storage", type="primary", key="upload_storage"):
+            if st.button("Enviar para o storage", type="primary", key="upload_storage"):
                 sucessos = 0
                 erros = []
                 avisos = []

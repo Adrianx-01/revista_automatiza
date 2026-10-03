@@ -13,97 +13,6 @@ from database_supabase import DatabaseSupabase
 from gerenciador_revistas import GerenciadorRevistas
 
 
-def aplicar_estilos_customizados():
-    """Aplica estilos CSS customizados"""
-    st.markdown("""
-    <style>
-    /* Sidebar branco */
-    [data-testid="stSidebar"] {
-        background-color: #FFFFFF !important;
-    }
-    
-    /* Fundo das páginas PRETO */
-    .stApp, section[data-testid="stMain"], .main .block-container, 
-    .main .element-container, .main div, .main section {
-        background-color: #000000 !important;
-    }
-    
-    /* TODOS OS TEXTOS EM BRANCO */
-    .main *, section[data-testid="stMain"] * {
-        color: #FFFFFF !important;
-    }
-    
-    /* Inputs com fundo escuro e texto branco */
-    .main input, .main textarea, .main select {
-        background-color: #1a1a1a !important;
-        color: #FFFFFF !important;
-        border: 1px solid #333333 !important;
-    }
-    
-    /* Dataframes com fundo escuro */
-    .main table, .main .stDataFrame, .main .stDataFrame *,
-    .main [data-testid="stDataFrame"], .main [data-testid="stDataFrame"] * {
-        background-color: #1a1a1a !important;
-        color: #FFFFFF !important;
-    }
-    
-    /* Sidebar texto preto */
-    [data-testid="stSidebar"] * {
-        color: #1f1f1f !important;
-    }
-    
-    /* Botões de navegação na sidebar - PRIMARY (ativo) - AZUL */
-    [data-testid="stSidebar"] button[kind="primary"],
-    [data-testid="stSidebar"] button[data-baseweb="button"][kind="primary"],
-    [data-testid="stSidebar"] button.stButton[kind="primary"],
-    [data-testid="stSidebar"] .stButton button[kind="primary"] {
-        background-color: #0066cc !important;
-        color: #FFFFFF !important;
-        border: 2px solid #0066cc !important;
-    }
-    
-    /* Botões de navegação na sidebar - SECONDARY (inativo) - PRETO/CINZA */
-    [data-testid="stSidebar"] button[kind="secondary"],
-    [data-testid="stSidebar"] button[data-baseweb="button"][kind="secondary"],
-    [data-testid="stSidebar"] button.stButton[kind="secondary"],
-    [data-testid="stSidebar"] .stButton button[kind="secondary"] {
-        background-color: #1f1f1f !important;
-        color: #FFFFFF !important;
-        border: 1px solid #333333 !important;
-    }
-    
-    /* Garantir que botões da sidebar não herdem estilos da área principal */
-    [data-testid="stSidebar"] button {
-        background-color: inherit !important;
-    }
-    
-    /* Override para garantir que botões secondary não fiquem azuis */
-    [data-testid="stSidebar"] button[kind="secondary"] * {
-        color: #FFFFFF !important;
-    }
-    
-    /* Botões azuis com texto branco - APENAS na área principal (depois das regras da sidebar) */
-    /* NÃO afetar botões do header */
-    section[data-testid="stMain"] button:not([data-testid*="baseButton-header"]),
-    section[data-testid="stMain"] button:not([data-testid*="baseButton-header"]) *,
-    .main button:not([data-testid*="baseButton-header"]),
-    .main button:not([data-testid*="baseButton-header"]) * {
-        background-color: #0066cc !important;
-        color: #FFFFFF !important;
-    }
-    
-    /* Garantir que o botão do header (toggle sidebar) não seja afetado */
-    [data-testid="stHeader"] button,
-    [data-testid="stHeader"] button *,
-    button[data-testid*="baseButton-header"],
-    button[data-testid*="baseButton-header"] * {
-        background-color: transparent !important;
-        color: inherit !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-
 def inicializar_session_state():
     """Inicializa variáveis do session state"""
     if 'dados_processados' not in st.session_state:
@@ -123,33 +32,23 @@ def inicializar_session_state():
 def renderizar_navegacao():
     """Renderiza a navegação na sidebar"""
     with st.sidebar:
-        # Logo no header
         try:
-            st.image("revist.png", use_container_width=True)
-        except:
-            st.title("📋 Sistema INPI")
-        
-        st.markdown("---")
-        
-        st.markdown("**Navegação**")
-        
-        if st.button("📚 Gerenciar Revistas", use_container_width=True, 
-                    type="primary" if st.session_state.pagina_ativa == "gerenciar" else "secondary",
-                    key="btn_gerenciar"):
-            st.session_state.pagina_ativa = "gerenciar"
-            st.rerun()
-        
-        if st.button("➕ Novas classes", use_container_width=True,
-                    type="primary" if st.session_state.pagina_ativa == "novas_classes" else "secondary",
-                    key="btn_novas_classes"):
-            st.session_state.pagina_ativa = "novas_classes"
-            st.rerun()
-        
-        if st.button("🔍 Consultar Dados", use_container_width=True,
-                    type="primary" if st.session_state.pagina_ativa == "consultar" else "secondary",
-                    key="btn_consultar"):
-            st.session_state.pagina_ativa = "consultar"
-            st.rerun()
+            st.image("revist.png", width="stretch")
+        except Exception:
+            st.markdown("**Revista INPI**")
+
+        st.caption("Processos concedidos")
+
+        paginas = (
+            ("gerenciar", "Gerenciar", "btn_gerenciar"),
+            ("novas_classes", "Novas classes", "btn_novas_classes"),
+            ("consultar", "Consultar", "btn_consultar"),
+        )
+        for chave, rotulo, key in paginas:
+            ativo = st.session_state.pagina_ativa == chave
+            if st.button(rotulo, width="stretch", type="primary" if ativo else "secondary", key=key):
+                st.session_state.pagina_ativa = chave
+                st.rerun()
 
 
 def renderizar_pagina_login(db):
@@ -223,12 +122,15 @@ def renderizar_pagina_login(db):
         opacity: 0.7 !important;
     }
     
-    /* Foco nos inputs - manter azul */
-    .main input:focus,
-    section[data-testid="stMain"] input:focus,
-    input[data-baseweb="input"]:focus {
-        border-color: #0066cc !important;
-        box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2) !important;
+    /* Botão de mostrar senha fora do azul sólido do Entrar */
+    div[data-testid="stTextInput"] button,
+    div[data-testid="stTextInput"] button *,
+    div[data-testid="stTextInput"] button:hover,
+    div[data-testid="stTextInput"] button:hover * {
+        background-color: #ffffff !important;
+        color: #0066cc !important;
+        border: none !important;
+        box-shadow: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -237,17 +139,11 @@ def renderizar_pagina_login(db):
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Logo no lugar do título - tamanho reduzido
         try:
-            # Usar width para controlar o tamanho da logo
             st.image("revist.png", width=200)
-        except:
-            st.title("Login")
-        
-        st.markdown("---")
-        
+        except Exception:
+            st.markdown("**Revista INPI**")
+
         if db is None:
             st.error("⚠️ Supabase não configurado. Configure SUPABASE_URL e SUPABASE_KEY no arquivo .env")
             return
@@ -264,56 +160,8 @@ def renderizar_pagina_login(db):
         
         # Formulário de login
         with st.form("form_login"):
-            # Usar st.markdown para aplicar estilos inline nos labels e remover botão de visibilidade da senha
-            st.markdown("""
-            <style>
-            div[data-testid="stTextInput"] label,
-            div[data-testid="stTextInput"] > div > label {
-                color: #0066cc !important;
-            }
-            /* Inputs com fundo branco, borda azul e texto azul - TODOS os inputs */
-            div[data-testid="stTextInput"] input,
-            div[data-testid="stTextInput"] input[type="text"],
-            div[data-testid="stTextInput"] input[type="password"],
-            input[type="text"],
-            input[type="password"],
-            input[data-baseweb="input"] {
-                background-color: #FFFFFF !important;
-                border: 2px solid #0066cc !important;
-                color: #0066cc !important;
-            }
-            /* Garantir que o input de senha especificamente tenha fundo branco */
-            div[data-testid="stTextInput"]:has(input[type="password"]) input,
-            div[data-testid="stTextInput"]:has(input[type="password"]) input[type="password"] {
-                background-color: #FFFFFF !important;
-                border: 2px solid #0066cc !important;
-                color: #0066cc !important;
-            }
-            /* Remover apenas o botão de mostrar/ocultar senha - mais específico */
-            div[data-testid="stTextInput"] button[data-baseweb="button"],
-            div[data-testid="stTextInput"] button[title*="Show"],
-            div[data-testid="stTextInput"] button[title*="Hide"],
-            div[data-testid="stTextInput"] button[aria-label*="password"],
-            div[data-testid="stTextInput"] > div > div:last-child button,
-            div[data-testid="stTextInput"] > div > div > div:last-child button {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                width: 0 !important;
-                height: 0 !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            /* Remover o container do botão, mas NÃO afetar o input */
-            div[data-testid="stTextInput"] > div > div:last-child:has(button):not(:has(input)),
-            div[data-testid="stTextInput"] > div > div > div:last-child:has(button):not(:has(input)) {
-                display: none !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            
-            email = st.text_input("📧 Email", placeholder="seu@email.com", key="input_email")
-            senha = st.text_input("🔒 Senha", type="password", placeholder="Digite sua senha", key="input_senha")
+            email = st.text_input("Email", placeholder="seu@email.com", key="input_email")
+            senha = st.text_input("Senha", type="password", placeholder="Digite sua senha", key="input_senha")
             
             submit = st.form_submit_button("Entrar", use_container_width=True, type="primary")
             
@@ -361,18 +209,8 @@ def renderizar_aplicacao(processador: ProcessadorINPI, db, init_supabase):
             renderizar_pagina_login(db)
             return
     
-    # Aplicar estilos customizados
-    aplicar_estilos_customizados()
-    
-    # Renderizar navegação
     renderizar_navegacao()
-    
-    # Sidebar sem informações do usuário
-    
-    # Título principal
-    st.title("📋 Sistema de Processos Concedidos da Revista INPI")
-    st.markdown("---")
-    
+
     # Renderizar página selecionada
     if st.session_state.pagina_ativa == "gerenciar":
         renderizar_aba_gerenciar_revistas(processador, db, init_supabase)
@@ -390,9 +228,8 @@ def definir_tipo_arquivo(arquivo):
 
 def renderizar_aba_gerenciar_revistas(processador: ProcessadorINPI, db, init_supabase):
     """Renderiza a aba de Gerenciar Revistas"""
-    st.header("📚 Gerenciamento de Revistas")
-    st.markdown("Upload, download e processamento de revistas do INPI no storage do Supabase")
-    st.markdown("---")
+    st.header("Gerenciar revistas")
+    st.caption("Envie o XML da revista, processe com os filtros e grave os processos concedidos.")
     
     # Inicializar session state para filtros
     if 'classes_desejadas' not in st.session_state:
@@ -407,106 +244,98 @@ def renderizar_aba_gerenciar_revistas(processador: ProcessadorINPI, db, init_sup
             st.session_state.reconnect_attempted = True
             st.rerun()
     else:
-        # Seção de Filtros
-        st.subheader("🎯 Filtros de Importação")
-        st.markdown("Configure as classes e palavras-chave que serão aplicadas ao processar as revistas")
-        
-        # Gerar opções de classes (1-45 como strings)
-        opcoes_classes = [str(i) for i in range(1, 46)]
-        
-        # Garantir que os valores padrão estão nas opções (normalizar zeros à esquerda)
-        classes_padrao_normalizadas = []
-        for c in st.session_state.classes_desejadas:
-            # Converter "03" para "3", "08" para "8", etc.
-            c_normalizada = str(int(c)) if c.isdigit() else c
-            if c_normalizada in opcoes_classes:
-                classes_padrao_normalizadas.append(c_normalizada)
-        
-        # Se não encontrou nenhuma, usar o padrão do processador
-        if not classes_padrao_normalizadas:
-            classes_padrao_normalizadas = processador.CLASSES_PADRAO.copy()
-        
-        # Campo para selecionar classes
-        classes_selecionadas = st.multiselect(
-            "📋 Classes Desejadas:",
-            options=opcoes_classes,
-            default=classes_padrao_normalizadas,
-            help="Selecione as classes Nice que deseja importar"
-        )
-        st.session_state.classes_desejadas = classes_selecionadas if classes_selecionadas else processador.CLASSES_PADRAO.copy()
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Campo para palavras-chave - multiselect similar ao de classes
-        # Obter todas as palavras-chave disponíveis (padrão + personalizadas)
-        todas_palavras = list(set(processador.PALAVRAS_CHAVE_PADRAO + st.session_state.palavras_chave_personalizadas))
-        todas_palavras = sorted([p for p in todas_palavras if p])  # Remover vazias e ordenar
-        
-        # Determinar palavras padrão selecionadas
-        palavras_padrao_selecionadas = []
-        for p in st.session_state.palavras_chave:
-            if p in todas_palavras:
-                palavras_padrao_selecionadas.append(p)
-        
-        # Se não houver selecionadas, usar padrão
-        if not palavras_padrao_selecionadas:
-            palavras_padrao_selecionadas = processador.PALAVRAS_CHAVE_PADRAO.copy()
-        
-        palavras_selecionadas = st.multiselect(
-            "🔍 Palavras-chave:",
-            options=todas_palavras,
-            default=palavras_padrao_selecionadas,
-            help="Selecione as palavras-chave que deseja usar para filtrar"
-        )
-        
-        # Campo para adicionar novas palavras
-        st.markdown("**Adicionar nova palavra-chave:**")
-        col_add, col_btn = st.columns([3, 1])
-        
-        with col_add:
-            nova_palavra = st.text_input(
-                "Nova palavra:",
-                key="nova_palavra_input",
-                label_visibility="collapsed",
-                placeholder="Digite uma nova palavra-chave"
+        n_classes = len(st.session_state.classes_desejadas)
+        n_palavras = len(st.session_state.palavras_chave)
+        with st.expander(
+            f"Filtros de importação · {n_classes} classes · {n_palavras} palavras",
+            expanded=False,
+        ):
+            st.caption("Esses filtros valem ao baixar e processar as revistas.")
+
+            opcoes_classes = [str(i) for i in range(1, 46)]
+            classes_padrao_normalizadas = []
+            for c in st.session_state.classes_desejadas:
+                c_normalizada = str(int(c)) if c.isdigit() else c
+                if c_normalizada in opcoes_classes:
+                    classes_padrao_normalizadas.append(c_normalizada)
+            if not classes_padrao_normalizadas:
+                classes_padrao_normalizadas = processador.CLASSES_PADRAO.copy()
+
+            if "filtro_classes_importacao" not in st.session_state:
+                classes_iniciais = list(classes_padrao_normalizadas)
+                for classe in processador.CLASSES_PADRAO:
+                    if classe not in classes_iniciais:
+                        classes_iniciais.append(classe)
+                st.session_state.filtro_classes_importacao = classes_iniciais
+
+            classes_selecionadas = st.multiselect(
+                "Classes desejadas",
+                options=opcoes_classes,
+                key="filtro_classes_importacao",
+                help="Selecione as classes Nice que deseja importar"
             )
-        
-        with col_btn:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("➕ Adicionar", key="adicionar_palavra", use_container_width=True):
-                if nova_palavra and nova_palavra.strip():
-                    palavra_limpa = nova_palavra.strip()
-                    # Verificar se já existe (case insensitive)
-                    palavras_lower = [p.lower() for p in todas_palavras]
-                    if palavra_limpa.lower() not in palavras_lower:
-                        # Adicionar à lista de personalizadas
-                        st.session_state.palavras_chave_personalizadas.append(palavra_limpa)
-                        # Adicionar às selecionadas
-                        if palavra_limpa not in palavras_selecionadas:
-                            palavras_selecionadas.append(palavra_limpa)
-                        st.success(f"✅ Palavra '{palavra_limpa}' adicionada!")
-                        st.rerun()
+            st.session_state.classes_desejadas = classes_selecionadas if classes_selecionadas else processador.CLASSES_PADRAO.copy()
+
+            todas_palavras = list(set(processador.PALAVRAS_CHAVE_PADRAO + st.session_state.palavras_chave_personalizadas))
+            todas_palavras = sorted([p for p in todas_palavras if p])
+            palavras_padrao_selecionadas = [p for p in st.session_state.palavras_chave if p in todas_palavras]
+            if not palavras_padrao_selecionadas:
+                palavras_padrao_selecionadas = processador.PALAVRAS_CHAVE_PADRAO.copy()
+
+            if "filtro_palavras_importacao" not in st.session_state:
+                palavras_iniciais = list(palavras_padrao_selecionadas)
+                ja_escolhidas = {p.lower() for p in palavras_iniciais}
+                for palavra in ("tinta", "suplemento", "porta", "filamento"):
+                    if palavra.lower() not in ja_escolhidas and palavra in todas_palavras:
+                        palavras_iniciais.append(palavra)
+                        ja_escolhidas.add(palavra.lower())
+                st.session_state.filtro_palavras_importacao = palavras_iniciais
+
+            palavras_selecionadas = st.multiselect(
+                "Palavras-chave",
+                options=todas_palavras,
+                key="filtro_palavras_importacao",
+                help="Selecione as palavras-chave que deseja usar para filtrar"
+            )
+
+            st.caption("Adicionar palavra-chave")
+            col_add, col_btn = st.columns([3, 1])
+            with col_add:
+                nova_palavra = st.text_input(
+                    "Nova palavra:",
+                    key="nova_palavra_input",
+                    label_visibility="collapsed",
+                    placeholder="Digite uma nova palavra-chave"
+                )
+            with col_btn:
+                if st.button("Adicionar", key="adicionar_palavra", width="stretch"):
+                    if nova_palavra and nova_palavra.strip():
+                        palavra_limpa = nova_palavra.strip()
+                        palavras_lower = [p.lower() for p in todas_palavras]
+                        if palavra_limpa.lower() not in palavras_lower:
+                            st.session_state.palavras_chave_personalizadas.append(palavra_limpa)
+                            if palavra_limpa not in palavras_selecionadas:
+                                palavras_selecionadas.append(palavra_limpa)
+                            st.session_state.filtro_palavras_importacao = list(palavras_selecionadas)
+                            st.session_state.palavras_chave = list(palavras_selecionadas)
+                            st.success(f"Palavra '{palavra_limpa}' adicionada.")
+                            st.rerun()
+                        else:
+                            st.warning(f"A palavra '{palavra_limpa}' já existe na lista.")
                     else:
-                        st.warning(f"⚠️ A palavra '{palavra_limpa}' já existe na lista!")
-        
-        # Atualizar session state
-        st.session_state.palavras_chave = palavras_selecionadas if palavras_selecionadas else processador.PALAVRAS_CHAVE_PADRAO.copy()
-        
-        st.markdown("---")
+                        st.warning("Digite uma palavra antes de adicionar.")
+
+            st.session_state.palavras_chave = palavras_selecionadas if palavras_selecionadas else processador.PALAVRAS_CHAVE_PADRAO.copy()
         
         gerenciador = GerenciadorRevistas(db)
         
-        # Seção de Upload
-        st.subheader("📤 Upload de Revista")
+        st.subheader("Enviar revista")
         gerenciador.renderizar_upload()
         
-        st.markdown("---")
+        st.subheader("Baixar e processar")
+        st.caption("As revistas selecionadas são baixadas do storage e gravadas com os filtros de importação.")
         
-        # Seção de Download e Processamento Automático
-        st.subheader("📥 Download e Processar Revistas")
-        st.markdown("Baixe revistas do storage e processe automaticamente com os filtros configurados acima")
-        
-        if st.button("🔄 Atualizar Lista", key="refresh_revistas"):
+        if st.button("Atualizar lista", key="refresh_revistas"):
             st.rerun()
         
         revistas = gerenciador.listar_revistas_disponiveis()
@@ -525,7 +354,7 @@ def renderizar_aba_gerenciar_revistas(processador: ProcessadorINPI, db, init_sup
             
             with col_download:
                 if revistas_selecionadas:
-                    if st.button("⬇️ Baixar e Processar", key="download_processar_revista", type="primary"):
+                    if st.button("Baixar e processar", key="download_processar_revista", type="primary"):
                         total_processos = 0
                         sucessos = 0
                         erros = []
@@ -591,11 +420,11 @@ def renderizar_aba_gerenciar_revistas(processador: ProcessadorINPI, db, init_sup
                         if sucessos > 0:
                             st.rerun()
                 else:
-                    st.info("👈 Selecione pelo menos uma revista para processar.")
+                    st.caption("Selecione pelo menos uma revista para processar.")
             
             with col_delete:
                 if revistas_selecionadas:
-                    if st.button("🗑️ Deletar do Storage", key="delete_revistas", type="secondary"):
+                    if st.button("Deletar do storage", key="delete_revistas", type="secondary"):
                         deletados = 0
                         for revista in revistas_selecionadas:
                             if gerenciador.deletar_revista(revista):
@@ -607,14 +436,14 @@ def renderizar_aba_gerenciar_revistas(processador: ProcessadorINPI, db, init_sup
                         else:
                             st.error("❌ Erro ao deletar revistas")
                 else:
-                    st.info("👈 Selecione revistas para deletar.")
+                    st.caption("Selecione revistas para deletar.")
         else:
             st.info("Nenhuma revista encontrada no storage.")
 
 
 def renderizar_aba_novas_classes(processador: ProcessadorINPI, db, init_supabase):
     """Página dedicada: importar classes adicionais a partir do XML já no storage (sem carregar a aba Gerenciar)."""
-    st.header("➕ Novas classes")
+    st.header("Novas classes")
     st.caption(
         "Escolha o XML no bucket, as classes Nice e importe só o que ainda não está em `dados_marcas` "
         "para aquele número de revista. A lista de arquivos vem **direto do storage** (carregamento mais rápido)."
@@ -680,6 +509,7 @@ def _processar_bytes_xml_com_filtros(
         coluna_classe=coluna_classe,
         coluna_especificacao=coluna_espec,
     )
+    df = _excluir_processos_fora_da_analise(df)
     return df, numero_revista
 
 
@@ -951,6 +781,14 @@ def processar_arquivo_upload(arquivo_upload, processador: ProcessadorINPI, db):
                     coluna_classe=coluna_classe if coluna_classe else 'classe',
                     coluna_especificacao=coluna_espec if coluna_espec else 'especificacao'
                 )
+
+            antes = len(df)
+            df = _excluir_processos_fora_da_analise(df)
+            pulados = antes - len(df)
+            if pulados:
+                st.caption(
+                    f"{pulados} processo(s) com empresa internacional ou marca N/A ficaram de fora da gravação."
+                )
             
             return df
         else:
@@ -1099,6 +937,128 @@ def renderizar_visualizacao_dados(df, processador: ProcessadorINPI):
         st.dataframe(df, use_container_width=True, hide_index=True)
 
 
+# Sufixos de empresas que não são analisadas. O nome precisa terminar com o termo.
+_SUFIXOS_EMPRESA_INTERNACIONAL = (
+    "CORPORATION", "LIMITED", "COMPANY", "JUNHONG", "ZHANG",
+    "S.R.L", "S.P.A", "S.A.U", "S/A", "N.V", "S.A", "B.V", "C.V",
+    "LLC", "LTD", "INC", "CORP", "GMBH", "SRL", "SPA", "SAU", "NV", "SA", "BV", "CV",
+    "KG", "AG", "AB", "SE", "CO",
+)
+
+
+def _empresa_termina_com_sufixo_internacional(nome) -> bool:
+    """True quando o nome da empresa termina com um sufixo da lista (LTD, INC, S.A., etc.)."""
+    if nome is None or (isinstance(nome, float) and pd.isna(nome)):
+        return False
+    texto = re.sub(r"\s+", " ", str(nome).strip().upper())
+    if not texto or texto in {"N/A", "NAN", "NONE"}:
+        return False
+    texto = re.sub(r"[\s\.,;:\-\)\]']+$", "", texto).strip()
+    if not texto:
+        return False
+
+    variantes = (texto, texto.replace(".", ""))
+    for candidato in variantes:
+        for sufixo in _SUFIXOS_EMPRESA_INTERNACIONAL:
+            if candidato == sufixo:
+                return True
+            if not candidato.endswith(sufixo):
+                continue
+            anterior = candidato[len(candidato) - len(sufixo) - 1]
+            # Ponto não separa termo: evita tratar "U.S.A." como "S.A."
+            if anterior != "." and not anterior.isalnum():
+                return True
+    return False
+
+
+def _marca_sem_forma_nominativa(valor) -> bool:
+    """True quando a marca foi gravada como N/A (sem forma nominativa)."""
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return False
+    texto = re.sub(r"\s+", "", str(valor).strip().upper())
+    return texto == "N/A"
+
+
+def _excluir_processos_fora_da_analise(df: pd.DataFrame) -> pd.DataFrame:
+    """Tira da gravação empresa com sufixo internacional e marca N/A."""
+    if df is None or df.empty:
+        return df
+    coluna_empresa = "titular" if "titular" in df.columns else (
+        "empresa" if "empresa" in df.columns else None
+    )
+    fora = pd.Series(False, index=df.index)
+    if coluna_empresa is not None:
+        fora = fora | df[coluna_empresa].map(_empresa_termina_com_sufixo_internacional)
+    if "marca" in df.columns:
+        fora = fora | df["marca"].map(_marca_sem_forma_nominativa)
+    if not fora.any():
+        return df
+    return df.loc[~fora].copy()
+
+
+def _processos_da_mascara(df: pd.DataFrame, mask, coluna_processo: str) -> list:
+    if mask is None or not mask.any():
+        return []
+    return sorted({
+        str(valor).strip()
+        for valor in df.loc[mask, coluna_processo]
+        if pd.notna(valor) and str(valor).strip()
+    })
+
+
+def _marcar_processos_automaticos_como_verificados(df: pd.DataFrame, db):
+    """
+    Envia para verificados empresas com sufixo internacional e marcas N/A.
+    Grava verificacao = 'verificado' no banco.
+    """
+    coluna_processo = "processo" if "processo" in df.columns else (
+        "numero_processo" if "numero_processo" in df.columns else None
+    )
+    if coluna_processo is None:
+        return df, 0, 0, None
+
+    if "verificacao" not in df.columns:
+        df["verificacao"] = ""
+
+    verificacao_vazia = (
+        df["verificacao"].isna()
+        | df["verificacao"].astype(str).str.strip().isin(["", "nan", "None", "none"])
+    )
+    coluna_empresa = "empresa" if "empresa" in df.columns else ("titular" if "titular" in df.columns else None)
+    if coluna_empresa is not None:
+        mask_internacional = df[coluna_empresa].map(_empresa_termina_com_sufixo_internacional) & verificacao_vazia
+    else:
+        mask_internacional = pd.Series(False, index=df.index)
+
+    if "marca" in df.columns:
+        mask_sem_nominativa = df["marca"].map(_marca_sem_forma_nominativa) & verificacao_vazia
+    else:
+        mask_sem_nominativa = pd.Series(False, index=df.index)
+
+    processos_internacionais = _processos_da_mascara(df, mask_internacional, coluna_processo)
+    processos_sem_nominativa = _processos_da_mascara(df, mask_sem_nominativa, coluna_processo)
+    processos = sorted(set(processos_internacionais) | set(processos_sem_nominativa))
+    if not processos:
+        return df, 0, 0, None
+
+    df.loc[df[coluna_processo].astype(str).str.strip().isin(processos), "verificacao"] = "verificado"
+
+    erro = None
+    if db is not None:
+        resultado = db.marcar_processos_como_verificados(processos)
+        if not resultado.get("sucesso"):
+            erro = resultado.get("erro") or "; ".join(resultado.get("erros") or [])
+
+    if erro is None:
+        if "verificacoes_dict" not in st.session_state:
+            st.session_state.verificacoes_dict = {}
+        for processo in processos:
+            st.session_state.verificacoes_dict[processo] = "verificado"
+        st.session_state.df_processos_consultar = df
+
+    return df, len(processos_internacionais), len(processos_sem_nominativa), erro
+
+
 def _parsear_palavras_especificacao_livre(texto: str) -> list:
     """Converte texto livre em lista de termos (separados por vírgula, ponto-e-vírgula ou linha)."""
     if not texto or not str(texto).strip():
@@ -1111,14 +1071,32 @@ def _parsear_palavras_especificacao_livre(texto: str) -> list:
     return palavras
 
 
+def _montar_tabela_consulta(df: pd.DataFrame) -> pd.DataFrame:
+    """Colunas da consulta, nesta ordem: marca, empresa, classe, especificação, revista, processo."""
+    grupos = (
+        ("Marca", ("marca", "nome_marca", "marca_nome")),
+        ("Empresa", ("empresa", "titular")),
+        ("Classe", ("classe", "classe_nice", "class")),
+        ("Especificação", ("especificacao",)),
+        ("Revista", ("n_revista", "numero_revista")),
+        ("Processo", ("processo", "numero_processo")),
+    )
+    dados = {}
+    for rotulo, opcoes in grupos:
+        for coluna in opcoes:
+            if coluna in df.columns:
+                dados[rotulo] = df[coluna].tolist()
+                break
+    if not dados:
+        ocultas = [coluna for coluna in ("id", "created_at", "status", "verificacao") if coluna in df.columns]
+        return df.drop(columns=ocultas)
+    return pd.DataFrame(dados)
+
+
 def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supabase):
     """Renderiza a aba de Consultar Dados"""
-    st.header("🔍 Consultar Dados")
-    st.markdown(
-        "Selecione a **classe Nice** e as **palavras na especificação** para carregar "
-        "apenas os processos que correspondem."
-    )
-    st.markdown("---")
+    st.header("Consultar")
+    st.caption("Escolha a classe e os termos da especificação. Empresas internacionais e marcas N/A vão para verificados.")
     
     if db is None:
         st.error("⚠️ Supabase não configurado. Configure SUPABASE_URL e SUPABASE_KEY no arquivo .env")
@@ -1132,32 +1110,33 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
         if 'texto_palavras_consultar' not in st.session_state:
             st.session_state.texto_palavras_consultar = ''
         
-        st.subheader("🎯 Classe e especificações")
         opcoes_classes = [str(i) for i in range(1, 46)]
-        
-        classes_selecionadas_consultar = st.multiselect(
-            "Classes Nice (1-45):",
-            options=opcoes_classes,
-            default=st.session_state.get('classes_consultar_selecionadas', []),
-            help="Selecione uma ou mais classes Nice",
-            key="multiselect_classes_consultar"
-        )
+        col_classes, col_palavras = st.columns([1, 1])
+        with col_classes:
+            classes_selecionadas_consultar = st.multiselect(
+                "Classes Nice",
+                options=opcoes_classes,
+                default=st.session_state.get('classes_consultar_selecionadas', []),
+                help="Selecione uma ou mais classes Nice",
+                key="multiselect_classes_consultar"
+            )
         st.session_state.classes_consultar_selecionadas = classes_selecionadas_consultar
 
-        texto_palavras_consultar = st.text_area(
-            "Palavras na especificação:",
-            height=100,
-            placeholder="Digite o que deseja buscar — uma palavra ou expressão por linha, ou separadas por vírgula.\nEx.:\ncosméticos\ntelefone\nmóveis",
-            help="O processo entra se a especificação contiver **ao menos um** dos termos digitados.",
-            key="texto_palavras_consultar",
-        )
+        with col_palavras:
+            texto_palavras_consultar = st.text_area(
+                "Palavras na especificação",
+                height=110,
+                placeholder="Uma expressão por linha, ou separadas por vírgula.\nEx.: cosméticos, telefone, móveis",
+                help="O processo entra se a especificação contiver ao menos um dos termos.",
+                key="texto_palavras_consultar",
+            )
         palavras_especificacao_consultar = _parsear_palavras_especificacao_livre(texto_palavras_consultar)
-        
-        col_btn_carregar, col_btn_limpar = st.columns([1, 1])
+
+        col_btn_carregar, col_btn_limpar, _espaco = st.columns([1, 1, 2])
         with col_btn_carregar:
-            carregar_clicado = st.button("📥 Carregar Dados", type="primary", key="btn_carregar_consultar", use_container_width=True)
+            carregar_clicado = st.button("Carregar", type="primary", key="btn_carregar_consultar", width="stretch")
         with col_btn_limpar:
-            limpar_clicado = st.button("🔄 Limpar e Recarregar", key="btn_limpar_consultar", use_container_width=True)
+            limpar_clicado = st.button("Limpar", key="btn_limpar_consultar", width="stretch")
         
         if limpar_clicado:
             st.session_state.df_processos_consultar = None
@@ -1243,18 +1222,28 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
                         coluna_revista = col
                         break
             
-            st.info(f"📊 **{len(df)}** processo(s) encontrado(s)")
-            st.markdown("---")
-            
-            # Filtros
-            st.subheader("🔍 Filtros")
+            df, qtd_internacionais, qtd_sem_nominativa, erro_automaticos = _marcar_processos_automaticos_como_verificados(df, db)
+            avisos_automaticos = []
+            if qtd_internacionais:
+                avisos_automaticos.append(f"{qtd_internacionais} de empresas internacionais")
+            if qtd_sem_nominativa:
+                avisos_automaticos.append(f"{qtd_sem_nominativa} com marca N/A")
+            if avisos_automaticos:
+                st.caption("Enviados direto para verificados: " + " e ".join(avisos_automaticos) + ".")
+            if erro_automaticos:
+                st.warning(
+                    "A lista desta tela já separou esses processos, mas o banco não gravou a verificação: "
+                    f"{erro_automaticos}"
+                )
+
+            st.caption("Refinar esta lista")
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 if coluna_classe:
                     classes_unicas = sorted([str(c) for c in df[coluna_classe].unique() if pd.notna(c)])
                     classe_selecionada = st.selectbox(
-                        "Filtrar por Classe:",
+                    "Classe",
                         options=["Todas"] + classes_unicas,
                         key="filtro_classe_consultar"
                     )
@@ -1265,7 +1254,7 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
                 if coluna_marca:
                     marcas_unicas = sorted([str(m) for m in df[coluna_marca].unique() if pd.notna(m)])
                     marca_selecionada = st.selectbox(
-                        "Filtrar por Marca:",
+                        "Marca",
                         options=["Todas"] + marcas_unicas,
                         key="filtro_marca_consultar"
                     )
@@ -1276,7 +1265,7 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
                 if coluna_revista:
                     revistas_unicas = sorted([str(r) for r in df[coluna_revista].unique() if pd.notna(r)], reverse=True)
                     revista_selecionada = st.selectbox(
-                        "Filtrar por Revista:",
+                        "Revista",
                         options=["Todas"] + revistas_unicas,
                         key="filtro_revista_consultar"
                     )
@@ -1285,10 +1274,8 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
                     st.warning("⚠️ Coluna de revista não encontrada para filtro.")
             
             with col4:
-                st.metric("Total de Processos", len(df))
-            
-            st.markdown("---")
-            
+                st.metric("Carregados", len(df))
+
             # Aplicar filtros
             df_filtrado = df.copy()
             
@@ -1302,9 +1289,7 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
                 df_filtrado = df_filtrado[df_filtrado[coluna_revista].astype(str) == revista_selecionada]
             
             if len(df_filtrado) < len(df):
-                st.info(f"📋 **{len(df_filtrado)}** processo(s) após aplicar filtros (de {len(df)} total)")
-            
-            st.markdown("---")
+                st.caption(f"{len(df_filtrado)} neste recorte, de {len(df)} carregados.")
             
             # Atualizar coluna verificacao com valores do session state
             for idx, row in df_filtrado.iterrows():
@@ -1327,144 +1312,92 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
                 (df_filtrado['verificacao'].astype(str).str.strip() != '')
             ].copy()
             
-            # Remover colunas id, created_at e status se existirem
-            colunas_para_remover = ['id', 'created_at', 'status']
-            
-            # ========== TABELA 1: PROCESSOS NÃO VERIFICADOS ==========
-            st.subheader("📋 Processos Filtrados (Não Verificados)")
-            st.markdown("Selecione os processos que deseja marcar como verificados")
-            
+            st.subheader(f"Para analisar ({len(df_nao_verificados)})")
+            st.caption("Marque as linhas e envie para verificados.")
+
             if not df_nao_verificados.empty:
-                # Inicializar seleção de processos se não existir
-                if 'processos_selecionados' not in st.session_state:
-                    st.session_state.processos_selecionados = set()
-                
-                colunas_para_exibir_nao_ver = df_nao_verificados.columns.tolist()
-                for col in colunas_para_remover:
-                    if col in colunas_para_exibir_nao_ver:
-                        colunas_para_exibir_nao_ver.remove(col)
-                
-                # Remover coluna verificacao da exibição (não precisamos mais dela aqui)
-                if 'verificacao' in colunas_para_exibir_nao_ver:
-                    colunas_para_exibir_nao_ver.remove('verificacao')
-                
-                df_exibicao_nao_ver = df_nao_verificados[colunas_para_exibir_nao_ver].copy()
-                
-                # Resetar índice para garantir mapeamento correto
-                df_exibicao_nao_ver = df_exibicao_nao_ver.reset_index(drop=True)
                 df_nao_verificados_reset = df_nao_verificados.reset_index(drop=True)
-                
-                # Adicionar coluna de seleção (checkbox)
-                df_exibicao_nao_ver.insert(0, 'Selecionar', False)
-                
-                # Configurar coluna de checkbox
+                df_exibicao_nao_ver = _montar_tabela_consulta(df_nao_verificados_reset)
+                df_exibicao_nao_ver.insert(0, "Selecionar", False)
+
                 column_config_nao_ver = {
-                    'Selecionar': st.column_config.CheckboxColumn(
+                    "Selecionar": st.column_config.CheckboxColumn(
                         "Selecionar",
                         help="Marque os processos que deseja verificar",
-                        width="small"
-                    )
+                        width="small",
+                    ),
+                    "Especificação": st.column_config.TextColumn("Especificação", width="large"),
+                    "Empresa": st.column_config.TextColumn("Empresa", width="medium"),
+                    "Marca": st.column_config.TextColumn("Marca", width="medium"),
                 }
-                
-                # Usar data_editor para permitir seleção
+
                 df_editado_nao_ver = st.data_editor(
                     df_exibicao_nao_ver,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=column_config_nao_ver,
+                    disabled=[coluna for coluna in df_exibicao_nao_ver.columns if coluna != "Selecionar"],
                     num_rows="fixed",
-                    key="tabela_processos_nao_verificados"
+                    key="tabela_processos_nao_verificados",
                 )
-                
-                # Botão para marcar como verificado
-                processos_selecionados = df_editado_nao_ver[df_editado_nao_ver['Selecionar'] == True]
+
+                processos_selecionados = df_editado_nao_ver[df_editado_nao_ver["Selecionar"] == True]
                 num_selecionados = len(processos_selecionados)
-                
+
                 col_btn, col_info = st.columns([1, 2])
-                
                 with col_btn:
-                    if st.button("✅ Marcar como Verificado", 
-                                type="primary", 
-                                disabled=(num_selecionados == 0),
-                                key="btn_marcar_verificado",
-                                use_container_width=True):
-                        # Obter números dos processos selecionados
+                    if st.button(
+                        "Marcar como verificado",
+                        type="primary",
+                        disabled=(num_selecionados == 0),
+                        key="btn_marcar_verificado",
+                        width="stretch",
+                    ):
                         processos_para_verificar = []
-                        # O df_editado tem a mesma ordem que df_nao_verificados_reset (índices resetados)
                         indices_selecionados = processos_selecionados.index.tolist()
-                        
                         for idx_editado in indices_selecionados:
-                            # O índice do df_editado corresponde ao índice do df_nao_verificados_reset
                             if idx_editado < len(df_nao_verificados_reset):
-                                processo_num = df_nao_verificados_reset.iloc[idx_editado].get('processo', None)
+                                processo_num = df_nao_verificados_reset.iloc[idx_editado].get("processo", None)
+                                if not processo_num:
+                                    processo_num = df_nao_verificados_reset.iloc[idx_editado].get("numero_processo", None)
                                 if processo_num:
                                     processos_para_verificar.append(str(processo_num))
-                        
+
                         if processos_para_verificar:
-                            # Marcar como verificado (usar valor padrão "verificado")
                             verificacoes_para_salvar = {proc: "verificado" for proc in processos_para_verificar}
-                            
                             with st.spinner(f"Marcando {len(verificacoes_para_salvar)} processo(s) como verificado(s)..."):
                                 resultado = db.atualizar_verificacoes_lote(verificacoes_para_salvar)
-                                if resultado['sucesso']:
-                                    # Atualizar session state
+                                if resultado["sucesso"]:
                                     for proc in processos_para_verificar:
                                         st.session_state.verificacoes_dict[proc] = "verificado"
-                                        # Atualizar no DataFrame completo
-                                        mask = df['processo'] == proc
+                                        mask = df["processo"] == proc
                                         if mask.any():
-                                            df.loc[mask, 'verificacao'] = "verificado"
-                                            st.session_state.df_processos_consultar.loc[mask, 'verificacao'] = "verificado"
-                                    
-                                    st.success(f"✅ {resultado['sucessos']} processo(s) marcado(s) como verificado(s)!")
-                                    if resultado.get('erros'):
-                                        st.warning(f"⚠️ {len(resultado['erros'])} erro(s) ao salvar algumas verificações.")
-                                    # Recarregar dados para atualizar a separação
+                                            df.loc[mask, "verificacao"] = "verificado"
+                                            st.session_state.df_processos_consultar.loc[mask, "verificacao"] = "verificado"
+                                    st.success(f"{resultado['sucessos']} processo(s) marcado(s) como verificado(s).")
+                                    if resultado.get("erros"):
+                                        st.warning(f"{len(resultado['erros'])} erro(s) ao salvar algumas verificações.")
                                     st.rerun()
                                 else:
-                                    st.error(f"❌ Erro ao salvar verificações: {resultado.get('erro', 'Erro desconhecido')}")
-                
+                                    st.error(f"Erro ao salvar verificações: {resultado.get('erro', 'Erro desconhecido')}")
                 with col_info:
-                    st.info(f"📊 **{len(df_nao_verificados)}** processo(s) não verificado(s) | **{num_selecionados}** selecionado(s)")
+                    st.caption(f"{len(df_nao_verificados)} na lista · {num_selecionados} selecionado(s)")
             else:
-                st.info("✅ Todos os processos já foram verificados!")
-                df_editado_nao_ver = pd.DataFrame()
-            
-            st.markdown("---")
-            
-            # ========== TABELA 2: PROCESSOS VERIFICADOS ==========
-            st.subheader("✅ Processos Verificados")
-            st.markdown("Processos que já receberam verificação")
-            
-            if not df_verificados.empty:
-                colunas_para_exibir_ver = df_verificados.columns.tolist()
-                for col in colunas_para_remover:
-                    if col in colunas_para_exibir_ver:
-                        colunas_para_exibir_ver.remove(col)
-                
-                # Remover coluna verificacao da exibição (apenas para visualização)
-                if 'verificacao' in colunas_para_exibir_ver:
-                    colunas_para_exibir_ver.remove('verificacao')
-                
-                df_exibicao_ver = df_verificados[colunas_para_exibir_ver].copy()
-                
-                # Apenas exibir (sem edição)
-                st.dataframe(
-                    df_exibicao_ver,
-                    use_container_width=True,
-                    hide_index=True
-                )
-                
-                st.info(f"📊 **{len(df_verificados)}** processo(s) verificado(s)")
-            else:
-                st.info("ℹ️ Nenhum processo verificado ainda.")
-        else:
-            st.info(
-                "👆 Selecione a **classe**, digite os **termos na especificação** e clique em **Carregar Dados**."
-            )
+                st.caption("Nada pendente neste recorte.")
 
-        st.markdown("---")
-        with st.expander("🗑️ Apagar processos verificados do banco"):
+            with st.expander(f"Já verificados ({len(df_verificados)})", expanded=False):
+                if not df_verificados.empty:
+                    st.dataframe(
+                        _montar_tabela_consulta(df_verificados),
+                        width="stretch",
+                        hide_index=True,
+                    )
+                else:
+                    st.caption("Nenhum processo verificado neste recorte.")
+        else:
+            st.caption("Escolha a classe, digite os termos da especificação e clique em Carregar.")
+
+        with st.expander("Apagar processos verificados do banco"):
             st.warning(
                 "Remove **permanentemente** da tabela `dados_marcas` todos os registros "
                 "cuja coluna **verificacao** está preenchida (em qualquer classe ou revista)."
@@ -1481,7 +1414,7 @@ def renderizar_aba_consultar_dados(processador: ProcessadorINPI, db, init_supaba
                 key="confirmar_apagar_verificados",
             )
             if st.button(
-                "🗑️ Apagar todos os verificados",
+                "Apagar todos os verificados",
                 type="secondary",
                 disabled=not confirmar_exclusao,
                 key="btn_apagar_verificados",

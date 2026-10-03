@@ -386,7 +386,6 @@ class DatabaseSupabase:
                         )
                         query = query.or_(filtro_or)
                 
-                # Aplicar paginação com a coluna que funciona
                 query = query.order(coluna_timestamp_funcional, desc=True).range(
                     pagina * tamanho_pagina,
                     (pagina + 1) * tamanho_pagina - 1
@@ -397,11 +396,9 @@ class DatabaseSupabase:
                 if resultado.data and len(resultado.data) > 0:
                     todos_registros.extend(resultado.data)
                     
-                    # Se retornou menos que o tamanho da página, chegou ao fim
                     if len(resultado.data) < tamanho_pagina:
                         break
                     
-                    # Se já atingimos o limite máximo (apenas se limite foi definido)
                     if limite_maximo is not None and len(todos_registros) >= limite_maximo:
                         todos_registros = todos_registros[:limite_maximo]
                         break
@@ -409,7 +406,7 @@ class DatabaseSupabase:
                     pagina += 1
                 else:
                     break
-            
+
             if todos_registros:
                 df = pd.DataFrame(todos_registros)
                 # Mapear campos para compatibilidade com o resto do sistema
@@ -891,6 +888,50 @@ class DatabaseSupabase:
                 'erro': str(e)
             }
     
+    def marcar_processos_como_verificados(self, processos: List[str], verificacao: str = "verificado") -> Dict:
+        """
+        Marca vários processos como verificados em lotes (coluna verificacao).
+        """
+        try:
+            unicos: List[str] = []
+            vistos = set()
+            for processo in processos:
+                numero = str(processo).strip()
+                if numero and numero not in vistos:
+                    vistos.add(numero)
+                    unicos.append(numero)
+
+            if not unicos:
+                return {'sucesso': True, 'sucessos': 0, 'total': 0, 'erros': []}
+
+            sucessos = 0
+            erros = []
+            tamanho_lote = 80
+
+            for i in range(0, len(unicos), tamanho_lote):
+                lote = unicos[i:i + tamanho_lote]
+                try:
+                    self.supabase.table('dados_marcas').update({
+                        'verificacao': verificacao
+                    }).in_('processo', lote).execute()
+                    sucessos += len(lote)
+                except Exception as e:
+                    erros.append(str(e))
+
+            return {
+                'sucesso': len(erros) == 0,
+                'sucessos': sucessos,
+                'total': len(unicos),
+                'erros': erros
+            }
+        except Exception as e:
+            return {
+                'sucesso': False,
+                'erro': str(e),
+                'sucessos': 0,
+                'erros': [str(e)]
+            }
+
     def atualizar_verificacoes_lote(self, verificacoes: Dict[str, str]) -> Dict:
         """
         Atualiza múltiplas verificações de uma vez
